@@ -8,8 +8,6 @@ let word = [^' ''\t''\n']+
 let float_num = ['-''+']?['0'-'9']+'.'['0'-'9']*(['e''E']['-''+']?['0'-'9']+)?
 let int_num = ['-''+']?['0'-'9']+
 let whites = [' ''\t''\n']+
-let endl = ['\n']
-let any = _
 
 rule next_token interpret accepting =
   parse 
