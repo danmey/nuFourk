@@ -22,7 +22,7 @@ module Ref = struct
 end
 
 module Value = struct
-  type t = Int of int | Float of int | Ref of Ref.t
+  type t = Int of int | Float of int | Ref of Ref.t | Empty
 end
 
 module Cell = struct
@@ -37,10 +37,17 @@ end
 module Dictionary = struct
   type entry = Word.t list
   type t = (Name.t, entry) Hashtbl.t
+  let create() = Hashtbl.create 1000
 end
 
 module Model = struct
   type t = { istack:int Stack.t; fstack:float Stack.t; cells:Cell.t array; dict:Dictionary.t }
+  let create heap_size = { 
+    istack = Stack.create(); 
+    fstack = Stack.create(); 
+    cells  = Array.create heap_size Value.Empty; 
+    dict   = Dictionary.create() 
+  }
 end
 
 module Interpret = struct
