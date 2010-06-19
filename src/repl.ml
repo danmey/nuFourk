@@ -2,16 +2,11 @@ open Parser
 
 module Repl = struct
   open List
-  let compile code = 
-    print_endline "Compiling:";
-    iter print_endline code;
-    flush stdout;
-    ()
   let interpret code = 
     print_endline "Interpreting:";
-    iter print_endline code;
+    print_endline (match code with Token.Word nm -> nm);
     flush stdout;
-    ()
+    true
   let process loop =
     next_block interpret;
     loop()
