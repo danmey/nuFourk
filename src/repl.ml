@@ -4,7 +4,7 @@ module Repl = struct
   open List
   let interpret code = 
     print_endline "Interpreting:";
-    print_endline (match code with Token.Word nm -> nm);
+    print_endline (match code with Token.Word nm -> nm | Token.Float f -> string_of_float f);
     flush stdout;
     true
   let process loop =
