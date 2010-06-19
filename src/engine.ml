@@ -10,11 +10,10 @@ module Name = struct
   type t = string
 end
 
-module rec OpCode = struct
+module rec Opcode : sig type t end = struct
   type t = PushInt of int | PushFloat of float | PushLabel of Code.t | Call of Name.t
 end
-
-and Code = struct
+and Code : sig type t end = struct
   type t = Opcode.t list
 end
 
@@ -32,7 +31,7 @@ end
 
 module Word = struct
   type kind = Immediate | Executed
-  type t = { name:Name.t; kind:kind; OpCode.t list }
+  type t = { name:Name.t; kind:kind; code:Opcode.t list }
 end
 
 module Dictionary = struct
