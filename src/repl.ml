@@ -1,22 +1,17 @@
 open Parser
-
+open Engine
 module Repl = struct
   open List
-  let interpret code = 
-    print_endline "Interpreting:";
-    print_endline 
-      (match code with 
-	  Token.Word nm -> "word: " ^ nm 
-	| Token.Float f -> "float: " ^ string_of_float f
-	| Token.Integer i -> "integer: " ^ string_of_int i
-      );
-    flush stdout;
-    true
-  let process loop =
-    next_block interpret;
-    loop()
+  let process model loop =
+    loop (next_block Run.run model)
 end
 
-let rec main() = Repl.process main;;
+let rec loop model = 
+  Repl.process model loop
+
+let main () =
+  let model = init() in
+    loop model
+;;
   
 main();;

@@ -29,6 +29,7 @@ module Cell = struct
   type t = Value.t
 end
 
+
 (*
 module Stackop = struct
   let push = Stack.push
@@ -44,7 +45,6 @@ module Stackop = struct
       push b stack; push c stack; push stack a
 end
 *)
-
 module Stack = struct
   type 'a t = 'a list
   let push value stack = value::stack
@@ -52,8 +52,9 @@ module Stack = struct
   let create() = []
 end
 module rec Word : sig 
-  type t 
-  type code = Core of (Model.t -> Model.t) | User of Opcode.t list 
+  type kind = Immediate | Compiled
+  type code = Core of (Model.t -> Model.t) | User of Opcode.t list
+  type t = { name:Name.t; code:code; kind:kind; }
   val call : Model.t -> t-> Model.t 
   val core : Name.t -> (Model.t -> Model.t) -> t
 end = struct
@@ -66,16 +67,17 @@ end = struct
   let core name code = { name = name; code = Core code; kind = Compiled }
 end
 and Dictionary : sig 
-  type t 
+  type t = (Name.t, Word.t) Hashtbl.t
   val lookup : t -> Name.t -> Word.t
-	 val add    : t -> Name.t -> Word.t -> unit 
-	 val create : unit -> t 
+  val add    : t -> Word.t -> unit
+  val create : unit -> t 
 end = struct
   type t = (Name.t, Word.t) Hashtbl.t
-  let create() = Hashtbl.create 1000
+  let create() = (Hashtbl.create 1000)
   open Hashtbl
-  let lookup = find  
-  let add = add	
+  open Word
+  let lookup = find
+  let add dict word = add dict word.name word
 end
 and Model : sig 
   type t = 
@@ -84,6 +86,7 @@ and Model : sig
 	cells:Cell.t array; 
 	dict:Dictionary.t; 
 	state:State.t } 
+  val create : int -> t
   val pushi : t -> int -> t
   val pushf : t -> float -> t
   val popi : t -> t * int
@@ -108,14 +111,15 @@ end = struct
   let pushf model v = { model with fstack=push v model.fstack }
   let popi model = let v, s = pop model.istack in { model with istack=s },v
   let lookup model = Dictionary.lookup model.dict
-  let add model word = Dictionary.add model.dict; model
+  let add model word = Dictionary.add model.dict word ; model
 end
 
 module Boostrap = struct
   open Model
   open Word
-  let plus = core "+" (fun model -> let model,a = popi model in let model, b = popi model in pushi model (a+b))
-  let init model = add model plus
+  let plus = core "+" (fun model -> let model,a = popi model in let model, b = popi model in pushi model (a+b))2
+  let dot = core "." (fun model -> let model,a = popi model in print_int a; flush stdout; model)
+  let init model = add model plus; add model dot
 end
 
 module Run = struct
@@ -133,3 +137,7 @@ module Run = struct
 	    let word = lookup model name in
 	      call model word)
 end
+
+let init() = 
+  let model = Model.create 1000 in
+    Boostrap.init model
