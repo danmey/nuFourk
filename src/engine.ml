@@ -21,14 +21,6 @@ module Ref = struct
   type t = int
 end
 
-module Value = struct
-  type t = Int of int | Float of int | Ref of Ref.t | Empty
-end
-
-module Cell = struct
-  type t = Value.t
-end
-
 
 (*
 module Stackop = struct
@@ -51,6 +43,7 @@ module Stack = struct
   let pop (value::stack) = value,stack
   let create() = []
 end
+
 module rec Word : sig 
   type kind = Immediate | Compiled
   type code = Core of (Model.t -> Model.t) | User of Opcode.t list
@@ -65,8 +58,13 @@ end = struct
     match word.code with
 	Core  f -> f model
   let core name code = { name = name; code = Core code; kind = Compiled }
+end and Quotation : sig type t = Opcode.t list end = struct type t = Opcode.t list 
+end and Value : sig type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Opcode.t list end = struct
+  type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Quotation.t
 end
-and Dictionary : sig 
+and Cell : sig type t = Value.t end = struct
+  type t = Value.t
+end and Dictionary : sig 
   type t = (Name.t, Word.t) Hashtbl.t
   val lookup : t -> Name.t -> Word.t
   val add    : t -> Word.t -> unit
@@ -81,44 +79,42 @@ end = struct
 end
 and Model : sig 
   type t = 
-      { istack:int Stack.t; 
-	fstack:float Stack.t; 
-	cells:Cell.t array; 
-	dict:Dictionary.t; 
-	state:State.t } 
-  val create : int -> t
-  val pushi : t -> int -> t
-  val pushf : t -> float -> t
-  val popi : t -> t * int
+      { stack  : Cell.t Stack.t; 
+	qstack : Quotation.t Stack.t;
+	cells  : Cell.t array; 
+	dict   : Dictionary.t; 
+	state  : State.t } 
+  val create     : int -> t
+  val push_value : t -> Value.t -> t
+  val pop_value  : t -> t * int
   val add : t -> Word.t -> t
   val lookup : t -> Name.t -> Word.t
 end = struct
   type t = 
-      { istack:int Stack.t; 
-	fstack:float Stack.t; 
-	cells:Cell.t array; 
-	dict:Dictionary.t; 
-	state:State.t }
+      { stack  : Cell.t Stack.t; 
+	qstack : Quotation.t Stack.t;
+	cells  : Cell.t array; 
+	dict   : Dictionary.t; 
+	state  : State.t }
   let create heap_size = { 
-    istack = Stack.create(); 
-    fstack = Stack.create(); 
+    stack  = Stack.create(); 
+    qstack = Stack.create();
     cells  = Array.create heap_size Value.Empty; 
     dict   = Dictionary.create();
     state  = State.Interpreting;
   }
   open Stack
-  let pushi model v = { model with istack=push v model.istack }
-  let pushf model v = { model with fstack=push v model.fstack }
-  let popi model = let v, s = pop model.istack in { model with istack=s },v
-  let lookup model = Dictionary.lookup model.dict
+  let push_value model v = { model with stack=push v model.stack }
+  let pop_value model = let v, s = pop model.stack in { model with stack=s },v
   let add model word = Dictionary.add model.dict word ; model
+  let lookup model = Dictionary.lookup model.dict
 end
 
 module Boostrap = struct
   open Model
   open Word
-  let plus = core "+" (fun model -> let model,a = popi model in let model, b = popi model in pushi model (a+b))2
-  let dot = core "." (fun model -> let model,a = popi model in print_int a; flush stdout; model)
+  let plus = core "+" (fun model -> let model,a = pop_value model in let model, b = pop_value model in push_value model (a+b))
+  let dot = core "." (fun model  -> let model,a = pop_value model in print_int a; flush stdout; model)
   let init model = add model plus; add model dot
 end
 
@@ -131,8 +127,8 @@ module Run = struct
     match model.state with
       | Interpreting -> 
 	(match token with
-	  | Token.Integer value -> pushi model value
-	  | Token.Float value -> pushf model value
+	  | Token.Integer value -> push_value model (Value.Int value)
+	  | Token.Float value -> push_value model (Value.Float value)
 	  | Token.Word name -> 
 	    let word = lookup model name in
 	      call model word)
