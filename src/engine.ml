@@ -51,13 +51,19 @@ module Stack = struct
   let pop (value::stack) = value,stack
   let create() = []
 end
-module rec Word : sig type t type code = Core of (Model.t -> Model.t) | User of Opcode.t list val call : Model.t -> t-> Model.t end = struct
+module rec Word : sig 
+  type t 
+  type code = Core of (Model.t -> Model.t) | User of Opcode.t list 
+  val call : Model.t -> t-> Model.t 
+  val core : Name.t -> (Model.t -> Model.t) -> t
+end = struct
   type kind = Immediate | Compiled
   type code = Core of (Model.t -> Model.t) | User of Opcode.t list
   type t = { name:Name.t; code:code; kind:kind; }
   let call model word = 
     match word.code with
 	Core  f -> f model
+  let core name code = { name = name; code = Core code; kind = Compiled }
 end
 and Dictionary : sig 
   type t 
@@ -81,6 +87,7 @@ and Model : sig
   val pushi : t -> int -> t
   val pushf : t -> float -> t
   val popi : t -> t * int
+  val add : t -> Word.t -> t
   val lookup : t -> Name.t -> Word.t
 end = struct
   type t = 
@@ -101,13 +108,14 @@ end = struct
   let pushf model v = { model with fstack=push v model.fstack }
   let popi model = let v, s = pop model.istack in { model with istack=s },v
   let lookup model = Dictionary.lookup model.dict
+  let add model word = Dictionary.add model.dict; model
 end
 
 module Boostrap = struct
   open Model
   open Word
-  let w a = Core a
-  let plus = w (fun model -> let model,a = popi model in let model, b = popi model in pushi model (a+b))
+  let plus = core "+" (fun model -> let model,a = popi model in let model, b = popi model in pushi model (a+b))
+  let init model = add model plus
 end
 
 module Run = struct
