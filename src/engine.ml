@@ -86,7 +86,9 @@ and Model : sig
 	state  : State.t } 
   val create     : int -> t
   val push_value : t -> Value.t -> t
-  val pop_value  : t -> t * int
+  val pop_value  : t -> t * Value.t
+  val push_int_value : t -> int -> t
+  val pop_int_value  : t -> t * int
   val add : t -> Word.t -> t
   val lookup : t -> Name.t -> Word.t
 end = struct
@@ -106,6 +108,8 @@ end = struct
   open Stack
   let push_value model v = { model with stack=push v model.stack }
   let pop_value model = let v, s = pop model.stack in { model with stack=s },v
+  let push_int_value model v = { model with stack=push (Value.Int v) model.stack }
+  let pop_int_value model = let Value.Int v, s = pop model.stack in { model with stack=s },v
   let add model word = Dictionary.add model.dict word ; model
   let lookup model = Dictionary.lookup model.dict
 end
@@ -113,8 +117,8 @@ end
 module Boostrap = struct
   open Model
   open Word
-  let plus = core "+" (fun model -> let model,a = pop_value model in let model, b = pop_value model in push_value model (a+b))
-  let dot = core "." (fun model  -> let model,a = pop_value model in print_int a; flush stdout; model)
+  let plus = core "+" (fun model -> let model,a = pop_int_value model in let model, b = pop_int_value model in push_int_value model (a+b))
+  let dot = core "." (fun model  -> let model,a = pop_int_value model in print_int a; flush stdout; model)
   let init model = add model plus; add model dot
 end
 
@@ -128,7 +132,6 @@ module Run = struct
       | Interpreting -> 
 	(match token with
 	  | Token.Integer value -> push_value model (Value.Int value)
-	  | Token.Float value -> push_value model (Value.Float value)
 	  | Token.Word name -> 
 	    let word = lookup model name in
 	      call model word)
