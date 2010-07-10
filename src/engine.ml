@@ -115,7 +115,7 @@ end = struct
   let pop_int_value model = let Value.Int v, s = pop model.stack in { model with stack=s },v
   let add model word = Dictionary.add model.dict word ; model
   let lookup model = Dictionary.lookup model.dict
-  let begin_quote model = push (Quotation.make()) model.qstack; model
+  let begin_quote model = { model with qstack=push (Quotation.make()) model.qstack }
   let end_quote model = let model,q = pop_value model in push_value model q
   let state model = if empty model.qstack then State.Compiling else State.Compiling
 end
