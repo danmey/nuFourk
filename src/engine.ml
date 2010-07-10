@@ -58,7 +58,7 @@ end = struct
     match word.code with
 	Core  f -> f model
   let core name code = { name = name; code = Core code; kind = Compiled }
-end and Quotation : sig type t = Opcode.t list end = struct type t = Opcode.t list 
+end and Quotation : sig type t = Opcode.t list val make : unit -> Opcode.t list end = struct type t = Opcode.t list let make() = [] 
 end and Value : sig type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Opcode.t list end = struct
   type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Quotation.t
 end
