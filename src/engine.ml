@@ -173,7 +173,7 @@ module Boostrap = struct
 end
 
 module Run = struct
-  open Parser
+  open Lexer
   open State
   open Model
   open Word
