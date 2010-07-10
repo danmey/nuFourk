@@ -16,5 +16,5 @@ rule next_token interpret state =
     | int_num as t    { let state = interpret state (Token.Integer (int_of_string t)) in next_token interpret state lexbuf }
     | word as t       { let state = interpret state (Token.Word t) in next_token interpret state lexbuf }
 {
-  let next_block interpret state = next_token interpret state |> Lexing.from_channel stdin
+  let next_block interpret state = next_token interpret state (Lexing.from_channel stdin)
 }
