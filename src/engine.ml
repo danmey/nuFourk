@@ -119,25 +119,30 @@ end
 module Boostrap = struct
   open Model
   open Word
+
   let init model = 
-    [
-      core "+" (fun model -> 
+    let pop2 model = 
+
       let model, a = pop_int_value model in 
       let model, b = pop_int_value model in 
-	push_int_value model (a+b));
+	(b,a),model in
 
-     core "-" 
-       (fun model -> 
-	 let model, a = pop_int_value model in 
-	 let model, b = pop_int_value model in 
-	   push_int_value model (a+b));
-     
-     core "." 
-       (fun model  -> 
-	 let model,a = pop_int_value model in 
-	   print_int a; 
-	   flush stdout; 
-	   model)
+    let app2 op model = 
+      let (a,b), model = pop2 model in
+	op a b |> push_int_value model 
+    in
+
+    let eat1 f model =
+      let model, a = pop_int_value model in 
+	f a; model
+    in
+      
+    let with_flush f a = f a; flush stdout
+    in
+    [
+      core "+" **> app2 (+);
+      core "-" **> app2 (-);
+      core "." **> eat1 **> with_flush print_int
     ] |> List.fold_left add model
 end
 
