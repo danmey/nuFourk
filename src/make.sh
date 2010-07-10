@@ -1,5 +1,5 @@
 #!/bin/bash
 
-ocamllex -ml parser.mll
-ocamlfind ocamlc -package batteries -linkpkg parser.ml engine.ml repl.ml -o repl
+ocamllex -ml lexer.mll
+ocamlfind ocamlc -package batteries -linkpkg lexer.ml engine.ml repl.ml -o repl
 
