@@ -13,10 +13,10 @@ module Name = struct
 end
 
 module rec Opcode : sig 
-  type t = PushInt of int | PushFloat of float | Call of Name.t 
+  type t = PushInt of int | PushFloat of float | Call of Name.t | Code of Code.t
   val to_string : t -> string
 end = struct
-  type t = PushInt of int | PushFloat of float | Call of Name.t
+  type t = PushInt of int | PushFloat of float | Call of Name.t | Code of Code.t
   let to_string = function
     | PushInt v -> Printf.sprintf "d:%d " v
     | PushFloat v -> Printf.sprintf "f:%f " v
@@ -31,22 +31,6 @@ module Ref = struct
   type t = int
 end
 
-
-(*
-module Stackop = struct
-  let push = Stack.push
-  let pop = Stack.pop
-  let swap stack = 
-    let a = pop stack in
-    let b = pop stack in
-      push a stack; push b stack
-  let rot stack =
-    let a = pop stack in
-    let b = pop stack in
-    let c = pop stack in
-      push b stack; push c stack; push stack a
-end
-*)
 module Stack = struct
   type 'a t = 'a list
   let push value stack = value::stack
@@ -77,7 +61,9 @@ end = struct
   type t = Opcode.t list 
   let to_string q = String.concat " " **> List.map Opcode.to_string q
   let make() = [] 
-end and Value : sig type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Quotation.t end = struct
+end and Value : sig 
+  type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Quotation.t 
+end = struct
   type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Quotation.t
 end
 and Cell : sig type t = Value.t end = struct
