@@ -1,9 +1,11 @@
 open Parser
 open Engine
+open BatPervasives
+
 module Repl = struct
   open List
   let process model loop =
-    loop (next_block Run.run model)
+    loop |> next_block Run.run model
 end
 
 let rec loop model = 
