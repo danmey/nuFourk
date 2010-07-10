@@ -60,8 +60,7 @@ module rec Word : sig
   type kind = Immediate | Compiled
   type code = Core of (Model.t -> Model.t) | User of Opcode.t list
   type t = { name:Name.t; code:code; kind:kind; }
-  val call : Model.t -> t-> Model.t 
-  val core : Name.t -> (Model.t -> Model.t) -> t
+  val def : Name.t -> kind -> (Model.t -> Model.t) -> t
 end = struct
   type kind = Immediate | Compiled
 
@@ -69,12 +68,7 @@ end = struct
 
   type t = { name:Name.t; code:code; kind:kind; }
 
-  let call model word = 
-    match word.code, Model.state model with
-      | Core f, State.Interpreting -> f model
-      | Core f, State.Compiling    -> Model.compile model (Opcode.Call word.name)
-
-  let core name code = { name = name; code = Core code; kind = Compiled }
+  let def name kind code = { name = name; code = Core code; kind = kind }
 end and Quotation : sig 
   type t = Opcode.t list
   val to_string : t -> string
@@ -118,6 +112,7 @@ and Model : sig
   val begin_quote : t -> t
   val end_quote : t -> t
   val state : t -> State.t
+  val nested_state : t -> State.t
   val current_quote : t -> Quotation.t
   val compile : t -> Opcode.t -> t
 end = struct
@@ -141,8 +136,11 @@ end = struct
   let add model word = Dictionary.add model.dict word ; model
   let lookup model = Dictionary.lookup model.dict
   let begin_quote model = { model with qstack=push (Quotation.make()) model.qstack }
-  let end_quote model = let model,q = pop_value model in push_value model q
-  let state model = if empty model.qstack then State.Compiling else State.Compiling
+  let end_quote model = 
+    let v,st = pop model.qstack in 
+      push_value { model with qstack=st } (Value.Quotation v)
+  let state model = if empty model.qstack then State.Interpreting else State.Compiling
+  let nested_state model = if empty (snd **> pop model.qstack) then State.Interpreting else State.Compiling
   let current_quote model = top model.qstack
   let compile model name = let q,s = pop model.qstack in { model with qstack=push (q@[name]) s}
 end
@@ -167,18 +165,24 @@ module Boostrap = struct
       let model, a = pop_int_value model in 
 	f a; model
     in
+
+    let eata1 f model =
+      let model, a = pop_value model in 
+	f a; model
+    in
       
     let with_flush f a = f a; flush stdout
     in
     [
 
-      core "+" **> app2 (+);
-      core "-" **> app2 (-);
-      core "*" **> app2 ( *);
-      core "/" **> app2 (/);
-      core "." **> eat1 **> with_flush print_int;
-      core "[" **> begin_quote;
-      core "]" **> end_quote
+      def "+" Compiled **> app2 (+);
+      def "-" Compiled **> app2 (-);
+      def "*" Compiled **> app2 ( *);
+      def "/" Compiled **> app2 (/);
+      def "." Compiled **> eat1 **> with_flush print_int;
+      def "q." Compiled **> eata1 **> with_flush (fun (Value.Quotation q) -> print_endline (Quotation.to_string q););
+      def "[" Immediate **> begin_quote;
+      def "]" Immediate **> end_quote;
     ] |> List.fold_left add model
 end
 
@@ -187,14 +191,32 @@ module Run = struct
   open State
   open Model
   open Word
+
+
   let run model token = 
+    let perform word state model = 
+      let f = match word.code with Core f -> f in
+	match state,word.kind with 
+	  | Interpreting, _  -> f model
+	  | Compiling, Immediate -> 
+	    (match nested_state model with
+	      | Compiling -> compile model (Opcode.Call word.name)
+	      | Interpreting -> f model)
+	  | Compiling, Compiled -> compile model (Opcode.Call word.name)
+    in
     match state model with
       | Interpreting -> 
 	(match token with
 	  | Token.Integer value -> push_value model (Value.Int value)
 	  | Token.Word name -> 
 	    let word = lookup model name in
-	      call model word)
+	      perform word (state model) model)
+      | Compiling    -> 
+	(match token with
+	  | Token.Integer value -> compile model (Opcode.PushInt value)
+	  | Token.Word name -> 
+	    let word = lookup model name in
+	      perform word (state model) model)
 end
 
 let init() = 
