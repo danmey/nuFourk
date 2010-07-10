@@ -12,8 +12,16 @@ module Name = struct
   type t = string
 end
 
-module rec Opcode : sig type t end = struct
-  type t = PushInt of int | PushFloat of float | PushLabel of Code.t | Call of Name.t
+module rec Opcode : sig 
+  type t = PushInt of int | PushFloat of float | Call of Name.t 
+  val to_string : t -> string
+end = struct
+  type t = PushInt of int | PushFloat of float | Call of Name.t
+  let to_string = function
+    | PushInt v -> Printf.sprintf "d:%d " v
+    | PushFloat v -> Printf.sprintf "f:%f " v
+    | Call nm -> Printf.sprintf "%s " nm
+
 end
 and Code : sig type t end = struct
   type t = Opcode.t list
@@ -43,6 +51,7 @@ module Stack = struct
   type 'a t = 'a list
   let push value stack = value::stack
   let pop (value::stack) = value,stack
+  let top (value::stack) = value
   let empty = function [] -> true | _ -> false
   let create() = []
 end
@@ -55,13 +64,25 @@ module rec Word : sig
   val core : Name.t -> (Model.t -> Model.t) -> t
 end = struct
   type kind = Immediate | Compiled
+
   type code = Core of (Model.t -> Model.t) | User of Opcode.t list
+
   type t = { name:Name.t; code:code; kind:kind; }
+
   let call model word = 
     match word.code, Model.state model with
-	Core  f,State.Interpreting -> f model
+      | Core f, State.Interpreting -> f model
+      | Core f, State.Compiling    -> Model.compile model (Opcode.Call word.name)
+
   let core name code = { name = name; code = Core code; kind = Compiled }
-end and Quotation : sig type t = Opcode.t list val make : unit -> Opcode.t list end = struct type t = Opcode.t list let make() = [] 
+end and Quotation : sig 
+  type t = Opcode.t list
+  val to_string : t -> string
+  val make : unit -> Opcode.t list 
+end = struct 
+  type t = Opcode.t list 
+  let to_string q = String.concat " " **> List.map Opcode.to_string q
+  let make() = [] 
 end and Value : sig type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Quotation.t end = struct
   type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Quotation.t
 end
@@ -94,7 +115,11 @@ and Model : sig
   val pop_int_value  : t -> t * int
   val add : t -> Word.t -> t
   val lookup : t -> Name.t -> Word.t
+  val begin_quote : t -> t
+  val end_quote : t -> t
   val state : t -> State.t
+  val current_quote : t -> Quotation.t
+  val compile : t -> Opcode.t -> t
 end = struct
   type t = 
       { stack  : Cell.t Stack.t; 
@@ -118,6 +143,8 @@ end = struct
   let begin_quote model = { model with qstack=push (Quotation.make()) model.qstack }
   let end_quote model = let model,q = pop_value model in push_value model q
   let state model = if empty model.qstack then State.Compiling else State.Compiling
+  let current_quote model = top model.qstack
+  let compile model name = let q,s = pop model.qstack in { model with qstack=push (q@[name]) s}
 end
 
 module Boostrap = struct
@@ -144,11 +171,14 @@ module Boostrap = struct
     let with_flush f a = f a; flush stdout
     in
     [
+
       core "+" **> app2 (+);
       core "-" **> app2 (-);
       core "*" **> app2 ( *);
       core "/" **> app2 (/);
       core "." **> eat1 **> with_flush print_int;
+      core "[" **> begin_quote;
+      core "]" **> end_quote
     ] |> List.fold_left add model
 end
 
