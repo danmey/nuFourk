@@ -1,3 +1,4 @@
+open BatLexing
 open BatPervasives
 
 module Error = struct
@@ -68,29 +69,41 @@ end = struct
     let def name kind code = { name = name; code = Core code; kind = kind }
 end
 and Model : sig 
-  type t
-  val create        : int -> t
-  val push_int      : t -> int -> unit
-  val pop_int       : t -> int
-  val add_symbol    : t -> Word.t -> t
-  val lookup_symbol : t -> Name.t -> Word.t
+  type t = 
+      { stack  : Cell.t Stack.t; 
+	qstack : Quotation.t Stack.t;
+	cells  : Cell.t array; 
+	dict   : Dictionary.t;
+	lexbuf : Lexing.lexbuf;
+      }
+  val create         : int -> t
+  val push_int       : t -> int -> unit
+  val pop_int        : t -> int
+  val add_symbol     : t -> Word.t -> t
+  val lookup_symbol  : t -> Name.t -> Word.t
   val perform_symbol : t -> Name.t -> unit
+  val next_token     : t -> (t -> Lexer.Token.t -> t) -> t
 end = struct
   open Stack
   type t = 
       { stack  : Cell.t Stack.t; 
 	qstack : Quotation.t Stack.t;
 	cells  : Cell.t array; 
-	dict   : Dictionary.t; 
+	dict   : Dictionary.t;
+	lexbuf : Lexing.lexbuf;
       }
-  let create heap_size = { 
-    stack  = Stack.create(); 
-    qstack = Stack.create();
-    cells  = Array.create heap_size Value.Empty; 
-    dict   = Dictionary.create();
-  }
+  let create heap_size = 
+    let m = { 
+      stack  = Stack.create(); 
+      qstack = Stack.create();
+      cells  = Array.create heap_size Value.Empty; 
+      dict   = Dictionary.create();
+      lexbuf = from_input stdin;
+    } in
+      m
+
   let push_int model i = push (Value.Int i) model.stack
-  let pop_int model = 
+  let pop_int model =
     try
       match pop model.stack with 
 	| Value.Int i -> i
@@ -105,35 +118,38 @@ end = struct
       match (lookup_symbol model symbol).Word.code with
 	| Word.Core f -> f model
     with Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ symbol ^ "' is not found in this context!"))
+  let next_token model kont = Run.loop model (fun model token ->  let m = kont model token in Run.loop m Run.run)
 end
-
-module rec Run : sig
+and Run : sig
   val run : Model.t -> Lexer.Token.t -> Model.t
-  val process : Model.t -> (Model.t -> Lexer.Token.t -> Model.t) -> Model.t
-  val loop : Model.t -> Model.t
+  val loop : Model.t -> (Model.t -> Lexer.Token.t -> Model.t) -> Model.t
   val init : unit -> Model.t
 end = struct
   open Lexer
   open Model
   open Word
 
-
   let run model token = 
-    (match token with
-      | Token.Integer value -> push_int model value
-      | Token.Word name -> perform_symbol model name);
-    model
+    let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout; model in
+    try
+      (match token with
+	| Token.Integer value -> push_int model value
+	| Token.Word name -> perform_symbol model name);
+      model
+     with
+      | Error.Runtime_Type str -> top_er str
+      | Error.Symbol_Not_Bound str -> top_er str
+      | Error.Stack_Underflow -> top_er "Stack underflow!"
 
-  let process model loop =
-      loop |> Lexer.next_block Run.run model
-
-let rec loop model = 
-  process model loop
-
+      
+  let rec loop model f =
+    let model = Lexer.next_token f model model.lexbuf in
+      loop model f
 
 let init() = 
   let model = Model.create 1000 in
-    Boostrap.init model
+    Boostrap.init model;
+    loop model run
 
 end
 and Boostrap : sig
@@ -166,11 +182,10 @@ end = struct
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 (/);
       def "." Compiled **> lift1 **> with_flush print_int;
-      def "check" Compiled **> (fun model -> Lexer.next_block (fun _ -> 
-	function 
-	  | Lexer.Token.Word w -> print_endline w; flush stdout; model; Run.process model Run.run
-	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
-      ) model)
+      def "check" Compiled **> (fun model -> Model.next_token model (fun model -> function
+	| Lexer.Token.Word w -> print_endline w; flush stdout; model
+	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
+      ); ())
     ] |> List.fold_left add_symbol model
 end
 
