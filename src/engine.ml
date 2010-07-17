@@ -4,6 +4,7 @@ module Error = struct
   exception Runtime_Type of string
   exception Stack_Underflow
   exception Symbol_Not_Bound of string
+  exception Parse_Error of string
 end
 module Name = struct
   type t = string
@@ -106,7 +107,39 @@ end = struct
     with Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ symbol ^ "' is not found in this context!"))
 end
 
-module Boostrap = struct
+module rec Run : sig
+  val run : Model.t -> Lexer.Token.t -> Model.t
+  val process : Model.t -> (Model.t -> Lexer.Token.t -> Model.t) -> Model.t
+  val loop : Model.t -> Model.t
+  val init : unit -> Model.t
+end = struct
+  open Lexer
+  open Model
+  open Word
+
+
+  let run model token = 
+    (match token with
+      | Token.Integer value -> push_int model value
+      | Token.Word name -> perform_symbol model name);
+    model
+
+  let process model loop =
+      loop |> Lexer.next_block Run.run model
+
+let rec loop model = 
+  process model loop
+
+
+let init() = 
+  let model = Model.create 1000 in
+    Boostrap.init model
+
+end
+and Boostrap : sig
+  val init : Model.t -> Model.t
+end = struct
+    
   open Model
   open Word
 
@@ -128,28 +161,19 @@ module Boostrap = struct
     let with_flush f a = f a; flush stdout
     in
     [
-
       def "+" Compiled **> app2 (+);
       def "-" Compiled **> app2 (-);
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 (/);
       def "." Compiled **> lift1 **> with_flush print_int;
+      def "check" Compiled **> (fun model -> Lexer.next_block (fun _ -> 
+	function 
+	  | Lexer.Token.Word w -> print_endline w; flush stdout; model; Run.process model Run.run
+	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
+      ) model)
     ] |> List.fold_left add_symbol model
 end
 
-module Run = struct
-  open Lexer
-  open Model
-  open Word
-
-
-  let run model token = 
-    (match token with
-      | Token.Integer value -> push_int model value
-      | Token.Word name -> perform_symbol model name);
-    model
-
-let init() = 
-  let model = Model.create 1000 in
-    Boostrap.init model
-end
+let main () =
+  let model = Run.init() in
+    Run.loop model;
