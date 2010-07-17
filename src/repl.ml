@@ -12,7 +12,7 @@ let rec loop model =
   Repl.process model loop
 
 let main () =
-  let model = init() in
+  let model = Run.init() in
     loop model
 ;;
   
