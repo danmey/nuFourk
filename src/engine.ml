@@ -1,4 +1,4 @@
-xopen BatLexing
+open BatLexing
 open BatPervasives
 
 module Error = struct
@@ -174,7 +174,7 @@ end = struct
       let a = pop_int model in 
 	f a
     in
-    let tok f = Model.next_token model 
+    let tok f model = Model.next_token model
       (fun model -> function
 	| Lexer.Token.Word w -> f w; model
 	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
@@ -186,7 +186,7 @@ end = struct
 	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
       ); () 
     in
-
+(*
     let run (model,code) token = 
       let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout; model in
 	try
@@ -198,16 +198,15 @@ end = struct
 	  | Error.Runtime_Type str -> top_er str
 	  | Error.Symbol_Not_Bound str -> top_er str
 	  | Error.Stack_Underflow -> top_er "Stack underflow!"
-	    
       
   let rec loop_until model f p =
     let model = Lexer.next_token f (model,[]) model.lexbuf in
       loop_until model f
 
     let comp
-    let create model name =
-      add_symbol model empty
-	
+  let create model name =
+  add_symbol model empty
+*)
     let with_flush f a = f a; flush stdout
     in
     [
@@ -216,7 +215,6 @@ end = struct
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 ( / );
       def "." Compiled **> lift1 **> with_flush print_int;
-      def ":" Compiled **> tok **> with_flush print_endline;
       def "check" Compiled **> tok **> with_flush print_endline;
     ] |> List.fold_left add_symbol model
 end
