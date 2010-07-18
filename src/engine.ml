@@ -1,4 +1,4 @@
-open BatLexing
+xopen BatLexing
 open BatPervasives
 
 module Error = struct
@@ -67,6 +67,7 @@ end = struct
     type code = Core of (Model.t -> unit) | User of Code.t
     type t = { name:Name.t; code:code; kind:kind; }
     let def name kind code = { name = name; code = Core code; kind = kind }
+    let empty name = { name = name; code = User []; kind = Compiled }
 end
 and Model : sig 
   type t = 
@@ -173,19 +174,50 @@ end = struct
       let a = pop_int model in 
 	f a
     in
+    let tok f = Model.next_token model 
+      (fun model -> function
+	| Lexer.Token.Word w -> f w; model
+	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
+      ); () 
+    in
+    let tok1 f = Model.next_token model 
+      (fun model -> function
+	| Lexer.Token.Word w -> f model w; model
+	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
+      ); () 
+    in
 
+    let run (model,code) token = 
+      let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout; model in
+	try
+	  (match token with
+	    | Token.Integer value -> push_int model value
+	    | Token.Word name -> perform_symbol model name);
+	  model
+	with
+	  | Error.Runtime_Type str -> top_er str
+	  | Error.Symbol_Not_Bound str -> top_er str
+	  | Error.Stack_Underflow -> top_er "Stack underflow!"
+	    
+      
+  let rec loop_until model f p =
+    let model = Lexer.next_token f (model,[]) model.lexbuf in
+      loop_until model f
+
+    let comp
+    let create model name =
+      add_symbol model empty
+	
     let with_flush f a = f a; flush stdout
     in
     [
-      def "+" Compiled **> app2 (+);
-      def "-" Compiled **> app2 (-);
+      def "+" Compiled **> app2 ( + );
+      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
-      def "/" Compiled **> app2 (/);
+      def "/" Compiled **> app2 ( / );
       def "." Compiled **> lift1 **> with_flush print_int;
-      def "check" Compiled **> (fun model -> Model.next_token model (fun model -> function
-	| Lexer.Token.Word w -> print_endline w; flush stdout; model
-	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
-      ); ())
+      def ":" Compiled **> tok **> with_flush print_endline;
+      def "check" Compiled **> tok **> with_flush print_endline;
     ] |> List.fold_left add_symbol model
 end
 
