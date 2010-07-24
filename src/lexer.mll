@@ -1,6 +1,11 @@
 {
 module Token = struct
 type t = Integer of int | Float of float | Word of string | String of string
+let to_string = function
+  | Integer v -> string_of_int v
+  | Float v -> string_of_float v
+  | Word v -> v
+  | String v -> "\"" ^ v ^ "\""
 end
 }
 
