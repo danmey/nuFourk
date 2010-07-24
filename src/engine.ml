@@ -12,12 +12,13 @@ module Name = struct
 end
 
 module Code = struct
-  type opcode = PushInt of int | PushFloat of float | Call of Name.t | Code of t and t = opcode list
+  type opcode = PushInt of int | PushFloat of float | Call of Name.t
 
   let rec to_string = function
     | PushInt v -> Printf.sprintf "d:%d " v
     | PushFloat v -> Printf.sprintf "f:%f " v
     | Call nm -> Printf.sprintf "%s " nm
+  let compile = List.map (function | Lexer.Token.Integer v -> PushInt v | Lexer.Token.Word v -> Call v)
 end
 
 module Ref = struct
@@ -44,22 +45,23 @@ module rec Dictionary : sig
   val create : unit -> t 
 end = struct
   open Hashtbl
-  open Word
   type t = (Name.t, Word.t) Hashtbl.t
   let create() = (Hashtbl.create 1000)
   let lookup = find
-  let add dict word = add dict word.name word
+  let add dict word = add dict word.Word.name word
 end
 and Word : sig
     type kind = Macro | Compiled
-    type code = Core of (Model.t -> unit) | User of Code.t
+    type code = Core of (Model.t -> unit) | User of Code.opcode list
     type t = { name:Name.t; code:code; kind:kind; }
     val def : Name.t -> kind -> (Model.t -> unit) -> t
+    val def_user : Name.t -> Code.opcode list -> t
 end = struct
     type kind = Macro | Compiled
-    type code = Core of (Model.t -> unit) | User of Code.t
+    type code = Core of (Model.t -> unit) | User of Code.opcode list
     type t = { name:Name.t; code:code; kind:kind; }
     let def name kind code = { name = name; code = Core code; kind = kind }
+    let def_user name code = { name = name; code = User code; kind = Compiled }
     let empty name = { name = name; code = User []; kind = Compiled }
 end
 and Model : sig 
@@ -69,7 +71,7 @@ and Model : sig
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
-	mutable codebuf: Code.opcode list;
+	mutable tokenbuf: Lexer.Token.t list;
 	mutable state: state;
       }
   val create         : int -> t
@@ -86,7 +88,7 @@ end = struct
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
-	mutable codebuf: Code.opcode list;
+	mutable tokenbuf: Lexer.Token.t list;
 	mutable state: state;
       }
   let create heap_size = 
@@ -95,7 +97,7 @@ end = struct
       cells  = Array.create heap_size Value.Empty; 
       dict   = Dictionary.create();
       lexbuf = from_input stdin;
-      codebuf = [];
+      tokenbuf = [];
       state = Interpreting
     } in
       m
@@ -112,7 +114,7 @@ end = struct
   let add_symbol model word = Dictionary.add model.dict word ; model
   let lookup_symbol model name = try Dictionary.lookup model.dict name with | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
   let next_token model kont = Run.expect model (fun model token -> let m = kont model token in Run.continue model)
-  let flush_code model = model.codebuf <- []
+  let flush_code model = model.tokenbuf <- []
 end
 and Run : sig
   val run : Model.t -> Lexer.Token.t -> Model.t
@@ -126,10 +128,14 @@ end = struct
 
   let run model token =
     let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout in
-    let ex symbol =
+    let rec ex symbol =
 	let w = lookup_symbol model symbol in
 	  (match w.Word.code with
-	    | Word.Core f -> f model;())
+	    | Word.Core f -> f model;()
+	    | Word.User code -> List.iter (function
+		| Code.PushInt v -> push_int model v
+		| Code.Call w -> ex w) code
+	  )
     in
       (try
 	match model.state with
@@ -139,12 +145,12 @@ end = struct
 	      | Token.Word name -> ex name)
 	  | Compiling -> 
 	    (match token with
-	      | Token.Integer value -> model.codebuf <- (Code.PushInt value)::model.codebuf
+	      | Token.Integer value -> model.tokenbuf <- token::model.tokenbuf
 	      | Token.Word name -> 
 		let w = lookup_symbol model name in
 		  (match w.Word.kind with 
 		    | Word.Macro -> ignore(ex name)
-		    | Word.Compiled -> model.codebuf <- (Code.Call name)::model.codebuf))
+		    | Word.Compiled -> model.tokenbuf <- token::model.tokenbuf))
       with
 	| Error.Runtime_Type str -> top_er str
 	| Error.Symbol_Not_Bound str -> top_er str
@@ -187,7 +193,7 @@ end = struct
 	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
       ); () 
     in
-    let tok1 f = Model.next_token model 
+    let tok1 f model = Model.next_token model 
       (fun model -> function
 	| Lexer.Token.Word w -> f model w; model
 	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
@@ -203,7 +209,12 @@ end = struct
       def "." Compiled **> lift1 **> with_flush print_int;
       def "[" Compiled **> (fun model -> model.state <- Compiling);
       def "]" Macro    **> (fun model -> model.state <- Interpreting);
-      def ".." Macro   **> (fun model -> List.iter (print_endline -| Code.to_string) model.codebuf; flush stdout);
+      def ".." Macro   **> (fun model -> 
+	print_string "[ "; 
+	List.iter (fun x -> Printf.printf "%s " **> Lexer.Token.to_string x) **> List.rev model.tokenbuf; 
+	print_string "]"; 
+	flush stdout);
+      def ":" Compiled **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> Code.compile **> List.rev model.tokenbuf; model.tokenbuf <- []);
       def "check" Compiled **> tok **> with_flush print_endline;
     ] |> List.fold_left add_symbol model
 
