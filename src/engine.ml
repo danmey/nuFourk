@@ -76,6 +76,7 @@ and Model : sig
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
+	mutable codebuf: Code.opcode list;
       }
   val create         : int -> t
   val push_int       : t -> int -> unit
@@ -92,6 +93,7 @@ end = struct
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
+	mutable codebuf: Code.opcode list;
       }
   let create heap_size = 
     let m = { 
@@ -100,6 +102,7 @@ end = struct
       cells  = Array.create heap_size Value.Empty; 
       dict   = Dictionary.create();
       lexbuf = from_input stdin;
+      codebuf = [];
     } in
       m
 
@@ -120,6 +123,7 @@ end = struct
 	| Word.Core f -> f model
     with Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ symbol ^ "' is not found in this context!"))
   let next_token model kont = Run.expect model (fun model token -> let m = kont model token in Run.continue model)
+  let flush_code model = model.codebuf <- [] 
 end
 and Run : sig
   val run : Model.t -> Lexer.Token.t -> Model.t
