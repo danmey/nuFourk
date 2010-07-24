@@ -26,7 +26,7 @@ end
 
 module Quotation = struct
   type t = Code.t
-  let to_string q = String.concat " " **> List.map Code.to_string q
+  let to_string = String.concat " " -| List.map Code.to_string
   let make() = [] 
 end
 
