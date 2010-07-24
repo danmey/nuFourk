@@ -11,7 +11,7 @@ module Name = struct
   type t = string
 end
 
-module Code = struct 
+module Code = struct
   type opcode = PushInt of int | PushFloat of float | Call of Name.t | Code of t and t = opcode list
 
   let rec to_string = function
@@ -24,20 +24,13 @@ module Ref = struct
   type t = int
 end
 
-module Quotation = struct
-  type t = Code.t
-  let to_string = String.concat " " -| List.map Code.to_string
-  let make() = [] 
-end
-
 module Value = struct
-  type t = Int of int | Float of int | Ref of Ref.t | Empty | Quotation of Quotation.t
+  type t = Int of int | Float of int | Ref of Ref.t | Empty
   let to_string = function
     | Int _ -> "int"
     | Float _ -> "float"
     | Ref _ -> "ref"
     | Empty -> "empty"
-    | Quotation _ -> "code"
 end
 
 module Cell = struct
@@ -73,7 +66,6 @@ and Model : sig
   type state = Interpreting | Compiling
   type t = 
       { stack  : Cell.t Stack.t; 
-	qstack : Quotation.t Stack.t;
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
@@ -91,7 +83,6 @@ end = struct
   type state = Interpreting | Compiling
   type t = 
       { stack  : Cell.t Stack.t; 
-	qstack : Quotation.t Stack.t;
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
@@ -101,7 +92,6 @@ end = struct
   let create heap_size = 
     let m = { 
       stack  = Stack.create(); 
-      qstack = Stack.create();
       cells  = Array.create heap_size Value.Empty; 
       dict   = Dictionary.create();
       lexbuf = from_input stdin;
