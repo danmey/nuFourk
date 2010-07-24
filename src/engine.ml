@@ -119,12 +119,13 @@ end = struct
       match (lookup_symbol model symbol).Word.code with
 	| Word.Core f -> f model
     with Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ symbol ^ "' is not found in this context!"))
-  let next_token model kont = Run.loop model (fun model token ->  let m = kont model token in Run.loop m Run.run)
+  let next_token model kont = Run.expect model (fun model token -> let m = kont model token in Run.continue model)
 end
 and Run : sig
   val run : Model.t -> Lexer.Token.t -> Model.t
-  val loop : Model.t -> (Model.t -> Lexer.Token.t -> Model.t) -> Model.t
-  val init : unit -> Model.t
+  val expect : Model.t -> (Model.t -> Lexer.Token.t -> Model.t) -> Model.t
+  val continue: Model.t -> Model.t
+  val start : unit -> Model.t
 end = struct
   open Lexer
   open Model
@@ -141,16 +142,14 @@ end = struct
       | Error.Runtime_Type str -> top_er str
       | Error.Symbol_Not_Bound str -> top_er str
       | Error.Stack_Underflow -> top_er "Stack underflow!"
+	
+  let expect model kont = Lexer.next_token kont model model.lexbuf
+  let continue model = expect model run
 
-      
-  let rec loop model f =
-    let model = Lexer.next_token f model model.lexbuf in
-      loop model f
-
-let init() = 
+let start() = 
   let model = Model.create 1000 in
     Boostrap.init model;
-    loop model run
+    continue model
 
 end
 and Boostrap : sig
@@ -186,6 +185,17 @@ end = struct
 	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
       ); () 
     in
+    let with_flush f a = f a; flush stdout
+    in
+    [
+      def "+" Compiled **> app2 ( + );
+      def "-" Compiled **> app2 ( - );
+      def "*" Compiled **> app2 ( * );
+      def "/" Compiled **> app2 ( / );
+      def "." Compiled **> lift1 **> with_flush print_int;
+      def "check" Compiled **> tok **> with_flush print_endline;
+    ] |> List.fold_left add_symbol model
+
 (*
     let run (model,code) token = 
       let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout; model in
@@ -207,18 +217,8 @@ end = struct
   let create model name =
   add_symbol model empty
 *)
-    let with_flush f a = f a; flush stdout
-    in
-    [
-      def "+" Compiled **> app2 ( + );
-      def "-" Compiled **> app2 ( - );
-      def "*" Compiled **> app2 ( * );
-      def "/" Compiled **> app2 ( / );
-      def "." Compiled **> lift1 **> with_flush print_int;
-      def "check" Compiled **> tok **> with_flush print_endline;
-    ] |> List.fold_left add_symbol model
+
 end
 
-let main () =
-  let model = Run.init() in
-    Run.loop model;
+let main () =  Run.start()
+
