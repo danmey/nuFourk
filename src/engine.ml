@@ -212,6 +212,8 @@ end = struct
       def "/" Compiled **> app2 ( / );
       def "." Compiled **> lift1 **> with_flush print_int;
       def "[" Compiled **> (fun model -> model.state <- Compiling);
+      def "]" Macro    **> (fun model -> model.state <- Interpreting);
+      def ".." Macro   **> (fun model -> List.iter (print_endline -| Code.to_string) model.codebuf; flush stdout);
       def "check" Compiled **> tok **> with_flush print_endline;
     ] |> List.fold_left add_symbol model
 
