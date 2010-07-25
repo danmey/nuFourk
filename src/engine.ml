@@ -18,6 +18,7 @@ module Code = struct
     | PushInt v -> Printf.sprintf "d:%d " v
     | PushFloat v -> Printf.sprintf "f:%f " v
     | Call nm -> Printf.sprintf "%s " nm
+    | PushCode c -> Printf.sprintf "[ %s ]" **> String.concat " " **> List.map to_string c
   let compile = List.map 
     (function 
       | Lexer.Token.Integer v -> PushInt v 
@@ -302,7 +303,7 @@ end = struct
 *)
       def "." Compiled { Types.arguments = ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
       def "f." Compiled { Types.arguments = ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
-      def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> model.state <- Compiling; Stack.push (ref []) model.tokenbuf);
+      def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> if model.state != Compiling then (Stack.push (ref []) model.tokenbuf); model.state <- Compiling);
       def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> 
 	try
 	let code = !(Stack.pop model.tokenbuf) in
