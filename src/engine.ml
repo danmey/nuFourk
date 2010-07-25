@@ -90,18 +90,21 @@ end = struct
     let empty st = try top st; false with Empty -> true in
     let expect typ = 
       if empty stack then push typ arguments else
-	(let typ' = top stack in
-	   if typ' = typ then
-	    (pop stack;())
-	   else
-	     raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ'))))
+	(let typ' = pop stack in
+	   try
+	     match U.unify (typ', typ) with
+	       | [] ->  push typ' stack
+	       | (_,a)::_ -> push a stack
+	   with _ -> raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ'))))
     in
     let st nm = U.Term (nm, []) in
       List.iter 
   (function 
     | PushInt _ -> push (st "int") stack
     | PushFloat _ -> push (st "float") stack
-    | PushCode _ -> push (st "code") stack
+    | PushCode c -> 
+      let { arguments=arguments; return=return } = signature_of_code model c 
+      in push (U.Term ("code", arguments)) stack
     | Call name -> 
       let w = lookup_symbol model name in
       let s = signature_of_word model w in
@@ -109,10 +112,10 @@ end = struct
 	List.iter (fun typ -> push typ stack) **> List.rev s.return;
   ) code;
       { arguments = to_list arguments; return = to_list stack }
-  and signature_of_word model word = 
+  and signature_of_word model word  = 
       match word.Word.code with
       | User code -> signature_of_code model code
-      | Core (_,s) -> s
+      | Core (nm,s) -> s
 
 
   let print { return=return; arguments=arguments } =
@@ -226,6 +229,7 @@ end = struct
     List.iter (function
       | Code.PushInt v -> push_int model v
       | Code.PushFloat v -> push_float model v
+      | Code.PushCode v -> execute_code model v
       | Code.Call w -> execute_symbol model w)
   and execute_symbol model symbol = 
     let w = lookup_symbol model symbol in
@@ -322,10 +326,10 @@ end = struct
       def "." Compiled { Types.arguments = st ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
       def "f." Compiled { Types.arguments = st ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
       def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
-      def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> 
+      def "]" Macro { Types.arguments = []; Types.return = [U.Term ("code", [U.Var "a";U.Var "b"])] }    **> (fun model -> 
 	let code = !(Stack.pop model.codebuf) in
 	  Types.signature_of_code model **> List.rev **> code;
-	  (if Stack.is_empty model.codebuf then (model.state <- Interpreting;push_code model) else
+	  (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code model) else
 	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code);
       
       def ".." Compiled { Types.arguments = st ["code"]; Types.return = [] }   **> (fun model -> 
@@ -340,12 +344,12 @@ end = struct
 	  Types.signature_of_code model code;
 	  Dictionary.add model.dict **> Word.def_user name **> code;
 	);
-      def "!" Compiled { Types.arguments = st ["code"]; Types.return = [] } **> lift1c **>
+      def "!" Compiled { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [U.Var "b"] } **> lift1c **>
 	(fun code -> 
 	  Run.execute_code model code
 	);
 
-      def "check" Compiled { Types.arguments = st ["code"]; Types.return = [] } **> lift1c **>
+      def "check" Compiled { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [] } **> lift1c **>
 	(fun code -> 
 	  Types.print **> Types.signature_of_code model code;
 	  flush stdout;
