@@ -83,7 +83,7 @@ end = struct
   type t = { return: U.t list; arguments: U.t list; }
   open Stack
   open Code
-  let  to_list st = let ret = ref [] in iter (fun el -> ret := !ret@[el]) st; !ret
+  let to_list st = let ret = ref [] in iter (fun el -> ret := !ret@[el]) st; !ret
   let rec signature_of_code model code = 
     let arguments = Stack.create() in
     let stack = Stack.create() in
@@ -94,7 +94,7 @@ end = struct
 	   if typ' = typ then
 	    (pop stack;())
 	   else
-	     raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" typ typ')))
+	     raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ'))))
     in
     let st nm = U.Term (nm, []) in
       List.iter 
@@ -118,12 +118,12 @@ end = struct
   let print { return=return; arguments=arguments } =
     print_string "( ";
     (for i = 0 to List.length arguments-1 do
-      print_string (List.nth arguments i);
+      print_string **> U.to_string **> List.nth arguments i;
       print_string " ";
      done;);
     print_string "-> ";
     for i = 0 to List.length return-1 do
-      print_string (List.nth return i);
+      print_string **> U.to_string **> (List.nth return i);
       print_string " ";
     done;
     print_string ")";
@@ -307,18 +307,20 @@ end = struct
 	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
       ); () 
     in
-    let with_flush f a = f a; flush stdout
+    let with_flush f a = f a; flush stdout in
+    let st = List.map (fun x -> U.Term (x,[]))
     in
-    [
-      def "+" Compiled { Types.arguments = ["int";"int"]; Types.return = ["int"] }  **> app2i ( + );
-      def "f+" Compiled { Types.arguments = ["float";"float"]; Types.return = ["float"] }  **> app2f ( +. );
+      [
+	
+      def "+" Compiled { Types.arguments = st ["int";"int"]; Types.return = st ["int"] }  **> app2i ( + );
+      def "f+" Compiled { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
 
 (*      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 ( / ); 
 *)
-      def "." Compiled { Types.arguments = ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
-      def "f." Compiled { Types.arguments = ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
+      def "." Compiled { Types.arguments = st ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
+      def "f." Compiled { Types.arguments = st ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
       def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
       def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> 
 	let code = !(Stack.pop model.codebuf) in
@@ -326,7 +328,7 @@ end = struct
 	  (if Stack.is_empty model.codebuf then (model.state <- Interpreting;push_code model) else
 	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code);
       
-      def ".." Compiled { Types.arguments = ["code"]; Types.return = [] }   **> (fun model -> 
+      def ".." Compiled { Types.arguments = st ["code"]; Types.return = [] }   **> (fun model -> 
 	print_string "[ "; 
 	List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model; 
 	print_string "]"; 
@@ -338,12 +340,12 @@ end = struct
 	  Types.signature_of_code model code;
 	  Dictionary.add model.dict **> Word.def_user name **> code;
 	);
-      def "!" Compiled { Types.arguments = ["code"]; Types.return = [] } **> lift1c **>
+      def "!" Compiled { Types.arguments = st ["code"]; Types.return = [] } **> lift1c **>
 	(fun code -> 
 	  Run.execute_code model code
 	);
 
-      def "check" Compiled { Types.arguments = ["code"]; Types.return = [] } **> lift1c **>
+      def "check" Compiled { Types.arguments = st ["code"]; Types.return = [] } **> lift1c **>
 	(fun code -> 
 	  Types.print **> Types.signature_of_code model code;
 	  flush stdout;
