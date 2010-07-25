@@ -15,8 +15,8 @@ module Code = struct
   type opcode = PushInt of int | PushFloat of float | Call of Name.t | PushCode of opcode list
 
   let rec to_string = function
-    | PushInt v -> Printf.sprintf "d:%d " v
-    | PushFloat v -> Printf.sprintf "f:%f " v
+    | PushInt v -> Printf.sprintf "%d " v
+    | PushFloat v -> Printf.sprintf "%ff " v
     | Call nm -> Printf.sprintf "%s " nm
     | PushCode c -> Printf.sprintf "[ %s ]" **> String.concat " " **> List.map to_string c
   let compile = List.map 
@@ -81,7 +81,7 @@ end = struct
   type t = { return: string list; arguments: string list; }
   open Stack
   open Code
-  let  to_list st = let ret = ref [] in iter (fun el -> ret := el::!ret) st; !ret
+  let  to_list st = let ret = ref [] in iter (fun el -> ret := !ret@[el]) st; !ret
   let rec signature_of_code model code = 
     let arguments = Stack.create() in
     let stack = Stack.create() in
@@ -101,7 +101,9 @@ end = struct
     | Call name -> 
       let w = lookup_symbol model name in
       let s = signature_of_word model w in
-	List.iter (fun typ -> expect typ) s.arguments) code;
+	List.iter (fun typ -> expect typ) s.arguments;
+	List.iter (fun typ -> push typ stack) **> List.rev s.return;
+  ) code;
       { arguments = to_list arguments; return = to_list stack }
   and signature_of_word model word = 
       match word.Word.code with
@@ -115,7 +117,7 @@ end = struct
       print_string (List.nth arguments i);
       print_string " ";
      done;);
-    print_string " : ";
+    print_string "-> ";
     for i = 0 to List.length return-1 do
       print_string (List.nth return i);
       print_string " ";
@@ -281,6 +283,7 @@ end = struct
     in
     let lift1i f model = lift1 f pop_int model in
     let lift1f f model = lift1 f pop_float model in
+    let lift1c f model = lift1 f pop_code model in
 
     let tok f model = Model.next_token model
       (fun model -> function
@@ -298,7 +301,7 @@ end = struct
     in
     [
       def "+" Compiled { Types.arguments = ["int";"int"]; Types.return = ["int"] }  **> app2i ( + );
-      def "f+" Compiled { Types.arguments = ["float";"float"]; Types.return = ["float"] }    **> app2f ( +. );
+      def "f+" Compiled { Types.arguments = ["float";"float"]; Types.return = ["float"] }  **> app2f ( +. );
 
 (*      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
@@ -326,6 +329,11 @@ end = struct
 	  let code = pop_code model in
 	  Types.signature_of_code model code;
 	  Dictionary.add model.dict **> Word.def_user name **> code;
+	);
+      def "check" Macro { Types.arguments = ["code"]; Types.return = [] } **> lift1c **>
+	(fun code -> 
+	  Types.print **> Types.signature_of_code model code;
+	  flush stdout;
 	);
       def "type" Macro { Types.arguments = []; Types.return = [] } **> tok **> with_flush 
 	(fun name ->
@@ -358,11 +366,6 @@ end = struct
 *)
 
 end
-
-  
-  
-
-
 
 let main () =  Run.start()
 
