@@ -1,6 +1,8 @@
 open BatLexing
 open BatPervasives
 open BatOption
+open Unification
+
 module Error = struct
   exception Runtime_Type of string
   exception Stack_Underflow
@@ -71,14 +73,14 @@ end = struct
     let empty name = { name = name; code = User []; kind = Compiled }
 end
 and Types : sig
-  type t = { return: string list; arguments: string list; }
+  type t = { return: U.t list; arguments: U.t list; }
   val signature_of_code : Model.t -> Code.opcode list -> t
   val signature_of_word : Model.t -> Word.t -> t
   val print : t -> unit
 end = struct
   open Word
   open Model
-  type t = { return: string list; arguments: string list; }
+  type t = { return: U.t list; arguments: U.t list; }
   open Stack
   open Code
   let  to_list st = let ret = ref [] in iter (fun el -> ret := !ret@[el]) st; !ret
@@ -94,11 +96,12 @@ end = struct
 	   else
 	     raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" typ typ')))
     in
+    let st nm = U.Term (nm, []) in
       List.iter 
   (function 
-    | PushInt _ -> push "int" stack
-    | PushFloat _ -> push "float" stack
-    | PushCode _ -> push "code" stack
+    | PushInt _ -> push (st "int") stack
+    | PushFloat _ -> push (st "float") stack
+    | PushCode _ -> push (st "code") stack
     | Call name -> 
       let w = lookup_symbol model name in
       let s = signature_of_word model w in
