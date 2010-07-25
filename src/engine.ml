@@ -1,6 +1,6 @@
 open BatLexing
 open BatPervasives
-
+open BatOption
 module Error = struct
   exception Runtime_Type of string
   exception Stack_Underflow
@@ -52,17 +52,58 @@ end = struct
 end
 and Word : sig
     type kind = Macro | Compiled
-    type code = Core of (Model.t -> unit) | User of Code.opcode list
+    type code = Core of (Model.t -> unit) * Types.t | User of Code.opcode list
     type t = { name:Name.t; code:code; kind:kind; }
-    val def : Name.t -> kind -> (Model.t -> unit) -> t
+    val def : Name.t -> kind -> Types.t -> (Model.t -> unit) -> t
     val def_user : Name.t -> Code.opcode list -> t
 end = struct
     type kind = Macro | Compiled
-    type code = Core of (Model.t -> unit) | User of Code.opcode list
+    type code = Core of (Model.t -> unit) * Types.t | User of Code.opcode list
     type t = { name:Name.t; code:code; kind:kind; }
-    let def name kind code = { name = name; code = Core code; kind = kind }
+    let def name kind s code = { name = name; code = Core (code,s); kind = kind }
     let def_user name code = { name = name; code = User code; kind = Compiled }
     let empty name = { name = name; code = User []; kind = Compiled }
+end
+and Types : sig
+  type t = { return: int; arguments: int; }
+  val signature_of_word : Model.t -> Word.t -> t option
+  val print : t -> unit
+end = struct
+  open Word
+  open Model
+  type t = { return: int; arguments: int; }
+  let rec signature_of_word model word = 
+    match word.Word.code with
+      | User code ->
+	  let pushes = List.fold_left 
+	    (fun pushes -> function
+	      | Code.PushInt _ -> bind (fun pushes -> Some (pushes+1)) pushes
+	      | Code.Call name -> 
+		bind (fun pushes ->
+		  bind
+		    (fun { return=return; arguments=arguments } ->
+		      Some (pushes -  arguments +  return))
+		    (signature_of_word model **> Dictionary.lookup model.dict name)) pushes
+	    ) (Some 0) code in
+	    bind (fun pushes -> Some { return = pushes; arguments = 0 }) pushes
+      | Core (_,s) -> Some s
+  let print { return=return; arguments=arguments } =
+    print_int arguments;
+    print_string "( ";
+    if arguments < 0 then
+    (for i = 1 to -arguments do
+      print_string "int ";
+    done;) else
+    (for i = 1 to arguments do
+      print_string "int ";
+     done;);
+    print_string " : ";
+    for i = 1 to arguments do
+      print_string "int ";
+    done;
+    print_string ")";
+    
+	
 end
 and Model : sig 
   type state = Interpreting | Compiling
@@ -131,7 +172,7 @@ end = struct
     let rec ex symbol =
 	let w = lookup_symbol model symbol in
 	  (match w.Word.code with
-	    | Word.Core f -> f model;()
+	    | Word.Core (f,_) -> f model;()
 	    | Word.User code -> List.iter (function
 		| Code.PushInt v -> push_int model v
 		| Code.Call w -> ex w) code
@@ -202,20 +243,25 @@ end = struct
     let with_flush f a = f a; flush stdout
     in
     [
-      def "+" Compiled **> app2 ( + );
-      def "-" Compiled **> app2 ( - );
+      def "+" Compiled { Types.arguments = 2; Types.return = 1 }  **> app2 ( + );
+(*      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
-      def "/" Compiled **> app2 ( / );
-      def "." Compiled **> lift1 **> with_flush print_int;
-      def "[" Compiled **> (fun model -> model.state <- Compiling);
-      def "]" Macro    **> (fun model -> model.state <- Interpreting);
-      def ".." Macro   **> (fun model -> 
+      def "/" Compiled **> app2 ( / ); 
+*)
+      def "." Compiled { Types.arguments = 1; Types.return = 0 } **> lift1 **> with_flush print_int;
+      def "[" Compiled { Types.arguments = 0; Types.return = 0 }**> (fun model -> model.state <- Compiling);
+      def "]" Macro { Types.arguments = 0; Types.return = 0 }    **> (fun model -> model.state <- Interpreting);
+      def ".." Macro { Types.arguments = 0; Types.return = 0 }   **> (fun model -> 
 	print_string "[ "; 
 	List.iter (fun x -> Printf.printf "%s " **> Lexer.Token.to_string x) **> List.rev model.tokenbuf; 
 	print_string "]"; 
 	flush stdout);
-      def ":" Compiled **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> Code.compile **> List.rev model.tokenbuf; model.tokenbuf <- []);
-      def "check" Compiled **> tok **> with_flush print_endline;
+      def ":" Compiled { Types.arguments = 0; Types.return = 0 } **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> Code.compile **> List.rev model.tokenbuf; model.tokenbuf <- []);
+      def "type" Compiled { Types.arguments = 0; Types.return = 0 } **> tok **> with_flush 
+	(fun name ->
+	  let word = lookup_symbol model name in
+	    match Types.signature_of_word model word with Some v -> Types.print v; print_endline ""; | None -> print_endline "Wrong type!"
+	)
     ] |> List.fold_left add_symbol model
 
 (*
@@ -241,6 +287,11 @@ end = struct
 *)
 
 end
+
+  
+  
+
+
 
 let main () =  Run.start()
 
