@@ -88,17 +88,17 @@ end = struct
 	    bind (fun pushes -> Some { return = pushes; arguments = 0 }) pushes
       | Core (_,s) -> Some s
   let print { return=return; arguments=arguments } =
-    print_int arguments;
+    print_int return;
     print_string "( ";
-    if arguments < 0 then
-    (for i = 1 to -arguments do
+    if return < 0 then
+    (for i = 1 to -return do
       print_string "int ";
     done;) else
-    (for i = 1 to arguments do
+    (for i = 1 to return do
       print_string "int ";
      done;);
     print_string " : ";
-    for i = 1 to arguments do
+    for i = 1 to return do
       print_string "int ";
     done;
     print_string ")";
