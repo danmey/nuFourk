@@ -12,7 +12,7 @@ module Name = struct
 end
 
 module Code = struct
-  type opcode = PushInt of int | PushFloat of float | Call of Name.t
+  type opcode = PushInt of int | PushFloat of float | Call of Name.t | PushCode of opcode list
 
   let rec to_string = function
     | PushInt v -> Printf.sprintf "d:%d " v
@@ -30,12 +30,13 @@ module Ref = struct
 end
 
 module Value = struct
-  type t = Int of int | Float of float | Ref of Ref.t | Empty
+  type t = Int of int | Float of float | Ref of Ref.t | Empty | Code of Code.opcode list
   let to_string = function
     | Int _ -> "int"
     | Float _ -> "float"
     | Ref _ -> "ref"
     | Empty -> "empty"
+    | Code _ -> "code"
 end
 
 module Cell = struct
@@ -127,7 +128,7 @@ and Model : sig
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
-	mutable tokenbuf: Lexer.Token.t list;
+	tokenbuf: Lexer.Token.t list ref Stack.t;
 	mutable state: state;
       }
   val create         : int -> t
@@ -135,9 +136,12 @@ and Model : sig
   val pop_int        : t -> int
   val push_float     : t -> float -> unit
   val pop_float      : t -> float
+  val push_code     : t -> Code.opcode list -> unit
+  val pop_code      : t -> Code.opcode list
   val add_symbol     : t -> Word.t -> t
   val lookup_symbol  : t -> Name.t -> Word.t
   val next_token     : t -> (t -> Lexer.Token.t -> t) -> t
+  val append_token   : t -> Lexer.Token.t -> unit
 end = struct
   open Stack
   type state = Interpreting | Compiling
@@ -146,7 +150,7 @@ end = struct
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
-	mutable tokenbuf: Lexer.Token.t list;
+	tokenbuf: Lexer.Token.t list ref Stack.t;
 	mutable state: state;
       }
   let create heap_size = 
@@ -155,7 +159,7 @@ end = struct
       cells  = Array.create heap_size Value.Empty; 
       dict   = Dictionary.create();
       lexbuf = from_input stdin;
-      tokenbuf = [];
+      tokenbuf = Stack.create();
       state = Interpreting
     } in
       m
@@ -170,6 +174,15 @@ end = struct
 	Empty -> raise Error.Stack_Underflow
 
   let push_float model f = push (Value.Float f) model.stack
+  let push_code model f = push (Value.Code f) model.stack
+  let pop_code model =
+    try
+      match pop model.stack with 
+	| Value.Code i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `code' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+
   let pop_float model =
     try
       match pop model.stack with 
@@ -181,7 +194,7 @@ end = struct
   let add_symbol model word = Dictionary.add model.dict word ; model
   let lookup_symbol model name = try Dictionary.lookup model.dict name with | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
   let next_token model kont = Run.expect model (fun model token -> let m = kont model token in Run.continue model)
-  let flush_code model = model.tokenbuf <- []
+  let append_token model token = let l = top model.tokenbuf in l := token::!l
 end
 and Run : sig
   val run : Model.t -> Lexer.Token.t -> Model.t
@@ -214,13 +227,12 @@ end = struct
 	      | Token.Word name -> ex name)
 	  | Compiling -> 
 	    (match token with
-	      | Token.Integer value -> model.tokenbuf <- token::model.tokenbuf
-	      | Token.Float value -> model.tokenbuf <- token::model.tokenbuf
+	      | Token.Integer _ | Token.Float _ -> append_token model token
 	      | Token.Word name -> 
 		let w = lookup_symbol model name in
 		  (match w.Word.kind with 
 		    | Word.Macro -> ignore(ex name)
-		    | Word.Compiled -> model.tokenbuf <- token::model.tokenbuf))
+		    | Word.Compiled -> append_token model token))
       with
 	| Error.Runtime_Type str -> top_er str
 	| Error.Symbol_Not_Bound str -> top_er str
@@ -290,21 +302,26 @@ end = struct
 *)
       def "." Compiled { Types.arguments = ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
       def "f." Compiled { Types.arguments = ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
-      def "[" Compiled { Types.arguments = []; Types.return = [] }**> (fun model -> model.state <- Compiling);
-      def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> model.state <- Interpreting);
-      def ".." Macro { Types.arguments = []; Types.return = [] }   **> (fun model -> 
+      def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> model.state <- Compiling; Stack.push (ref []) model.tokenbuf);
+      def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> 
+	try
+	let code = !(Stack.pop model.tokenbuf) in
+	  push_code model **> Code.compile **> List.rev code
+	with Stack.Empty ->  model.state <- Interpreting);
+      
+      def ".." Macro { Types.arguments = ["code"]; Types.return = [] }   **> (fun model -> 
 	print_string "[ "; 
-	List.iter (fun x -> Printf.printf "%s " **> Lexer.Token.to_string x) **> List.rev model.tokenbuf; 
+	List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model; 
 	print_string "]"; 
 	flush stdout);
-      def ":" Compiled { Types.arguments = []; Types.return = [] } **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> Code.compile **> List.rev model.tokenbuf; model.tokenbuf <- []);
+      def ":" Compiled { Types.arguments = ["code"]; Types.return = [] } **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> pop_code model);
       def "type" Compiled { Types.arguments = []; Types.return = [] } **> tok **> with_flush 
 	(fun name ->
 	  let word = lookup_symbol model name in
 	  let s = Types.signature_of_word model word in 
 	    Types.print s; print_endline ""
 	)
-    ] |> List.fold_left add_symbol model
+      ] |> List.fold_left add_symbol model
 
 (*
     let run (model,code) token = 
