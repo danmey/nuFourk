@@ -26,7 +26,7 @@ module Ref = struct
 end
 
 module Value = struct
-  type t = Int of int | Float of int | Ref of Ref.t | Empty
+  type t = Int of int | Float of float | Ref of Ref.t | Empty
   let to_string = function
     | Int _ -> "int"
     | Float _ -> "float"
@@ -118,6 +118,8 @@ and Model : sig
   val create         : int -> t
   val push_int       : t -> int -> unit
   val pop_int        : t -> int
+  val push_float     : t -> float -> unit
+  val pop_float      : t -> float
   val add_symbol     : t -> Word.t -> t
   val lookup_symbol  : t -> Name.t -> Word.t
   val next_token     : t -> (t -> Lexer.Token.t -> t) -> t
@@ -152,6 +154,15 @@ end = struct
     with
 	Empty -> raise Error.Stack_Underflow
 
+  let push_float model f = push (Value.Float f) model.stack
+  let pop_float model =
+    try
+      match pop model.stack with 
+	| Value.Float i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `float' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+
   let add_symbol model word = Dictionary.add model.dict word ; model
   let lookup_symbol model name = try Dictionary.lookup model.dict name with | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
   let next_token model kont = Run.expect model (fun model token -> let m = kont model token in Run.continue model)
@@ -183,10 +194,12 @@ end = struct
 	  | Interpreting -> 
 	    (match token with
 	      | Token.Integer value -> push_int model value;()
+	      | Token.Float value -> push_float model value;()
 	      | Token.Word name -> ex name)
 	  | Compiling -> 
 	    (match token with
 	      | Token.Integer value -> model.tokenbuf <- token::model.tokenbuf
+	      | Token.Float value -> model.tokenbuf <- token::model.tokenbuf
 	      | Token.Word name -> 
 		let w = lookup_symbol model name in
 		  (match w.Word.kind with 
@@ -214,20 +227,29 @@ end = struct
   open Model
   open Word
 
-  let swap = uncurry **> flip **> curry identity
+  let swap (a,b) = (b,a)
   let init model = 
-    let pop2 model = 
-      swap (pop_int model, pop_int model) 
-    in
-    let app2 op model = 
-      let (a,b) = pop2 model in
-	op a b |> push_int model 
+
+    let app_pair f model = 
+      swap (f model, f model) 
     in
 
-    let lift1 f model =
-      let a = pop_int model in 
+    let app2 op pushv pop model = 
+      let (a,b) = app_pair pop model in
+	op a b |> pushv model
+    in
+
+    let app2i op = app2 op push_int pop_int in
+
+    let app2f op = app2 op push_float pop_float in
+
+    let lift1 f pop model = 
+      let a = pop model in 
 	f a
     in
+    let lift1i f model = lift1 f pop_int model in
+    let lift1f f model = lift1 f pop_float model in
+
     let tok f model = Model.next_token model
       (fun model -> function
 	| Lexer.Token.Word w -> f w; model
@@ -243,12 +265,15 @@ end = struct
     let with_flush f a = f a; flush stdout
     in
     [
-      def "+" Compiled { Types.arguments = 2; Types.return = 1 }  **> app2 ( + );
+      def "+" Compiled { Types.arguments = 2; Types.return = 1 }  **> app2i ( + );
+      def "f+" Compiled { Types.arguments = 2; Types.return = 1 }  **> app2f ( +. );
+
 (*      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 ( / ); 
 *)
-      def "." Compiled { Types.arguments = 1; Types.return = 0 } **> lift1 **> with_flush print_int;
+      def "." Compiled { Types.arguments = 1; Types.return = 0 } **> lift1i **> with_flush print_int;
+      def "f." Compiled { Types.arguments = 1; Types.return = 0 } **> lift1f **> with_flush print_float;
       def "[" Compiled { Types.arguments = 0; Types.return = 0 }**> (fun model -> model.state <- Compiling);
       def "]" Macro { Types.arguments = 0; Types.return = 0 }    **> (fun model -> model.state <- Interpreting);
       def ".." Macro { Types.arguments = 0; Types.return = 0 }   **> (fun model -> 
