@@ -129,7 +129,7 @@ and Model : sig
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
-	tokenbuf: Lexer.Token.t list ref Stack.t;
+	codebuf: Code.opcode list ref Stack.t;
 	mutable state: state;
       }
   val create         : int -> t
@@ -142,7 +142,7 @@ and Model : sig
   val add_symbol     : t -> Word.t -> t
   val lookup_symbol  : t -> Name.t -> Word.t
   val next_token     : t -> (t -> Lexer.Token.t -> t) -> t
-  val append_token   : t -> Lexer.Token.t -> unit
+  val append_opcode   : t -> Code.opcode -> unit
 end = struct
   open Stack
   type state = Interpreting | Compiling
@@ -151,7 +151,7 @@ end = struct
 	cells  : Cell.t array; 
 	dict   : Dictionary.t;
 	lexbuf : Lexing.lexbuf;
-	tokenbuf: Lexer.Token.t list ref Stack.t;
+	codebuf: Code.opcode list ref Stack.t;
 	mutable state: state;
       }
   let create heap_size = 
@@ -160,7 +160,7 @@ end = struct
       cells  = Array.create heap_size Value.Empty; 
       dict   = Dictionary.create();
       lexbuf = from_input stdin;
-      tokenbuf = Stack.create();
+      codebuf = Stack.create();
       state = Interpreting
     } in
       m
@@ -195,7 +195,7 @@ end = struct
   let add_symbol model word = Dictionary.add model.dict word ; model
   let lookup_symbol model name = try Dictionary.lookup model.dict name with | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
   let next_token model kont = Run.expect model (fun model token -> let m = kont model token in Run.continue model)
-  let append_token model token = let l = top model.tokenbuf in l := token::!l
+  let append_opcode model token = let l = top model.codebuf in l := token::!l
 end
 and Run : sig
   val run : Model.t -> Lexer.Token.t -> Model.t
@@ -228,12 +228,13 @@ end = struct
 	      | Token.Word name -> ex name)
 	  | Compiling -> 
 	    (match token with
-	      | Token.Integer _ | Token.Float _ -> append_token model token
+	      | Token.Integer v -> append_opcode model **> Code.PushInt v
+	      | Token.Float v -> append_opcode model **> Code.PushFloat v
 	      | Token.Word name -> 
 		let w = lookup_symbol model name in
 		  (match w.Word.kind with 
 		    | Word.Macro -> ignore(ex name)
-		    | Word.Compiled -> append_token model token))
+		    | Word.Compiled -> append_opcode model **> Code.Call name))
       with
 	| Error.Runtime_Type str -> top_er str
 	| Error.Symbol_Not_Bound str -> top_er str
@@ -303,11 +304,12 @@ end = struct
 *)
       def "." Compiled { Types.arguments = ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
       def "f." Compiled { Types.arguments = ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
-      def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> if model.state != Compiling then (Stack.push (ref []) model.tokenbuf); model.state <- Compiling);
+      def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
       def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> 
 	try
-	let code = !(Stack.pop model.tokenbuf) in
-	  push_code model **> Code.compile **> List.rev code
+	let code = !(Stack.pop model.codebuf) in
+	  (if Stack.is_empty model.codebuf then push_code model else
+	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code
 	with Stack.Empty ->  model.state <- Interpreting);
       
       def ".." Macro { Types.arguments = ["code"]; Types.return = [] }   **> (fun model -> 
@@ -315,8 +317,8 @@ end = struct
 	List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model; 
 	print_string "]"; 
 	flush stdout);
-      def ":" Compiled { Types.arguments = ["code"]; Types.return = [] } **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> pop_code model);
-      def "type" Compiled { Types.arguments = []; Types.return = [] } **> tok **> with_flush 
+      def ":" Macro { Types.arguments = []; Types.return = [] } **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> List.rev **> pop_code model);
+      def "type" Macro { Types.arguments = []; Types.return = [] } **> tok **> with_flush 
 	(fun name ->
 	  let word = lookup_symbol model name in
 	  let s = Types.signature_of_word model word in 
