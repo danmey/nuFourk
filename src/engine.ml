@@ -72,6 +72,7 @@ end = struct
 end
 and Types : sig
   type t = { return: string list; arguments: string list; }
+  val signature_of_code : Model.t -> Code.opcode list -> t
   val signature_of_word : Model.t -> Word.t -> t
   val print : t -> unit
 end = struct
@@ -80,30 +81,31 @@ end = struct
   type t = { return: string list; arguments: string list; }
   open Stack
   open Code
-  let rec signature_of_word model word = 
+  let  to_list st = let ret = ref [] in iter (fun el -> ret := el::!ret) st; !ret
+  let rec signature_of_code model code = 
     let arguments = Stack.create() in
     let stack = Stack.create() in
     let empty st = try top st; false with Empty -> true in
     let expect typ = 
       if empty stack then push typ arguments else
 	(let typ' = top stack in
-	  if typ' = typ then
+	   if typ' = typ then
 	    (pop stack;())
-	  else
-	    raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" typ typ')))
+	   else
+	     raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" typ typ')))
     in
-    let  to_list st = let ret = ref [] in iter (fun el -> ret := el::!ret) st; !ret in
+      List.iter 
+  (function 
+    | PushInt _ -> push "int" stack
+    | PushFloat _ -> push "float" stack
+    | Call name -> 
+      let w = lookup_symbol model name in
+      let s = signature_of_word model w in
+	List.iter (fun typ -> expect typ) s.arguments) code;
+      { arguments = to_list arguments; return = to_list stack }
+  and signature_of_word model word = 
       match word.Word.code with
-      | User code -> 
-	List.iter 
-	  (function 
-	    | PushInt _ -> push "int" stack
-	    | PushFloat _ -> push "float" stack
-	    | Call name -> 
-	      let w = lookup_symbol model name in
-	      let s = signature_of_word model w in
-		List.iter (fun typ -> expect typ) s.arguments) code;
-	{ arguments = to_list arguments; return = to_list stack }
+      | User code -> signature_of_code model code
       | Core (_,s) -> s
 
 
@@ -308,6 +310,7 @@ end = struct
       def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> 
 	try
 	let code = !(Stack.pop model.codebuf) in
+	  Types.signature_of_code model **> List.rev **> code;
 	  (if Stack.is_empty model.codebuf then push_code model else
 	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code
 	with Stack.Empty ->  model.state <- Interpreting);
@@ -317,7 +320,13 @@ end = struct
 	List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model; 
 	print_string "]"; 
 	flush stdout);
-      def ":" Macro { Types.arguments = []; Types.return = [] } **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> List.rev **> pop_code model);
+      def ":" Macro { Types.arguments = []; Types.return = [] } **> 
+	tok1 **> 
+	(fun model name -> 
+	  let code = pop_code model in
+	  Types.signature_of_code model code;
+	  Dictionary.add model.dict **> Word.def_user name **> code;
+	);
       def "type" Macro { Types.arguments = []; Types.return = [] } **> tok **> with_flush 
 	(fun name ->
 	  let word = lookup_symbol model name in
