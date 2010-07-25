@@ -18,7 +18,11 @@ module Code = struct
     | PushInt v -> Printf.sprintf "d:%d " v
     | PushFloat v -> Printf.sprintf "f:%f " v
     | Call nm -> Printf.sprintf "%s " nm
-  let compile = List.map (function | Lexer.Token.Integer v -> PushInt v | Lexer.Token.Word v -> Call v)
+  let compile = List.map 
+    (function 
+      | Lexer.Token.Integer v -> PushInt v 
+      | Lexer.Token.Float v -> PushFloat v
+      | Lexer.Token.Word v -> Call v)
 end
 
 module Ref = struct
@@ -65,41 +69,52 @@ end = struct
     let empty name = { name = name; code = User []; kind = Compiled }
 end
 and Types : sig
-  type t = { return: int; arguments: int; }
-  val signature_of_word : Model.t -> Word.t -> t option
+  type t = { return: string list; arguments: string list; }
+  val signature_of_word : Model.t -> Word.t -> t
   val print : t -> unit
 end = struct
   open Word
   open Model
-  type t = { return: int; arguments: int; }
+  type t = { return: string list; arguments: string list; }
+  open Stack
+  open Code
   let rec signature_of_word model word = 
-    match word.Word.code with
-      | User code ->
-	  let pushes = List.fold_left 
-	    (fun pushes -> function
-	      | Code.PushInt _ -> bind (fun pushes -> Some (pushes+1)) pushes
-	      | Code.Call name -> 
-		bind (fun pushes ->
-		  bind
-		    (fun { return=return; arguments=arguments } ->
-		      Some (pushes -  arguments +  return))
-		    (signature_of_word model **> Dictionary.lookup model.dict name)) pushes
-	    ) (Some 0) code in
-	    bind (fun pushes -> Some { return = pushes; arguments = 0 }) pushes
-      | Core (_,s) -> Some s
+    let arguments = Stack.create() in
+    let stack = Stack.create() in
+    let empty st = try top st; false with Empty -> true in
+    let expect typ = 
+      if empty stack then push typ arguments else
+	(let typ' = top stack in
+	  if typ' = typ then
+	    (pop stack;())
+	  else
+	    raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" typ typ')))
+    in
+    let  to_list st = let ret = ref [] in iter (fun el -> ret := el::!ret) st; !ret in
+      match word.Word.code with
+      | User code -> 
+	List.iter 
+	  (function 
+	    | PushInt _ -> push "int" stack
+	    | PushFloat _ -> push "float" stack
+	    | Call name -> 
+	      let w = lookup_symbol model name in
+	      let s = signature_of_word model w in
+		List.iter (fun typ -> expect typ) s.arguments) code;
+	{ arguments = to_list arguments; return = to_list stack }
+      | Core (_,s) -> s
+
+
   let print { return=return; arguments=arguments } =
-    print_int return;
     print_string "( ";
-    if return < 0 then
-    (for i = 1 to -return do
-      print_string "int ";
-    done;) else
-    (for i = 1 to return do
-      print_string "int ";
+    (for i = 0 to List.length arguments-1 do
+      print_string (List.nth arguments i);
+      print_string " ";
      done;);
     print_string " : ";
-    for i = 1 to return do
-      print_string "int ";
+    for i = 0 to List.length return-1 do
+      print_string (List.nth return i);
+      print_string " ";
     done;
     print_string ")";
     
@@ -186,6 +201,7 @@ end = struct
 	    | Word.Core (f,_) -> f model;()
 	    | Word.User code -> List.iter (function
 		| Code.PushInt v -> push_int model v
+		| Code.PushFloat v -> push_float model v
 		| Code.Call w -> ex w) code
 	  )
     in
@@ -265,27 +281,28 @@ end = struct
     let with_flush f a = f a; flush stdout
     in
     [
-      def "+" Compiled { Types.arguments = 2; Types.return = 1 }  **> app2i ( + );
-      def "f+" Compiled { Types.arguments = 2; Types.return = 1 }  **> app2f ( +. );
+      def "+" Compiled { Types.arguments = ["int";"int"]; Types.return = ["int"] }  **> app2i ( + );
+      def "f+" Compiled { Types.arguments = ["float";"float"]; Types.return = ["float"] }    **> app2f ( +. );
 
 (*      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 ( / ); 
 *)
-      def "." Compiled { Types.arguments = 1; Types.return = 0 } **> lift1i **> with_flush print_int;
-      def "f." Compiled { Types.arguments = 1; Types.return = 0 } **> lift1f **> with_flush print_float;
-      def "[" Compiled { Types.arguments = 0; Types.return = 0 }**> (fun model -> model.state <- Compiling);
-      def "]" Macro { Types.arguments = 0; Types.return = 0 }    **> (fun model -> model.state <- Interpreting);
-      def ".." Macro { Types.arguments = 0; Types.return = 0 }   **> (fun model -> 
+      def "." Compiled { Types.arguments = ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
+      def "f." Compiled { Types.arguments = ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
+      def "[" Compiled { Types.arguments = []; Types.return = [] }**> (fun model -> model.state <- Compiling);
+      def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> model.state <- Interpreting);
+      def ".." Macro { Types.arguments = []; Types.return = [] }   **> (fun model -> 
 	print_string "[ "; 
 	List.iter (fun x -> Printf.printf "%s " **> Lexer.Token.to_string x) **> List.rev model.tokenbuf; 
 	print_string "]"; 
 	flush stdout);
-      def ":" Compiled { Types.arguments = 0; Types.return = 0 } **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> Code.compile **> List.rev model.tokenbuf; model.tokenbuf <- []);
-      def "type" Compiled { Types.arguments = 0; Types.return = 0 } **> tok **> with_flush 
+      def ":" Compiled { Types.arguments = []; Types.return = [] } **> tok1 **> (fun model name -> Dictionary.add model.dict **> Word.def_user name **> Code.compile **> List.rev model.tokenbuf; model.tokenbuf <- []);
+      def "type" Compiled { Types.arguments = []; Types.return = [] } **> tok **> with_flush 
 	(fun name ->
 	  let word = lookup_symbol model name in
-	    match Types.signature_of_word model word with Some v -> Types.print v; print_endline ""; | None -> print_endline "Wrong type!"
+	  let s = Types.signature_of_word model word in 
+	    Types.print s; print_endline ""
 	)
     ] |> List.fold_left add_symbol model
 
