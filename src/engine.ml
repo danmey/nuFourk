@@ -98,6 +98,7 @@ end = struct
   (function 
     | PushInt _ -> push "int" stack
     | PushFloat _ -> push "float" stack
+    | PushCode _ -> push "code" stack
     | Call name -> 
       let w = lookup_symbol model name in
       let s = signature_of_word model w in
@@ -202,6 +203,9 @@ end = struct
   let append_opcode model token = let l = top model.codebuf in l := token::!l
 end
 and Run : sig
+  val execute_word : Model.t ->  Word.t -> unit
+  val execute_code : Model.t -> Code.opcode list -> unit
+  val execute_symbol : Model.t -> Name.t -> unit
   val run : Model.t -> Lexer.Token.t -> Model.t
   val expect : Model.t -> (Model.t -> Lexer.Token.t -> Model.t) -> Model.t
   val continue: Model.t -> Model.t
@@ -211,25 +215,28 @@ end = struct
   open Model
   open Word
 
+  let rec execute_word model word =
+	match word.Word.code with
+	    | Word.Core (f,_) -> f model;()
+	    | Word.User code -> execute_code model code
+  and execute_code model =
+    List.iter (function
+      | Code.PushInt v -> push_int model v
+      | Code.PushFloat v -> push_float model v
+      | Code.Call w -> execute_symbol model w)
+  and execute_symbol model symbol = 
+    let w = lookup_symbol model symbol in
+      execute_word model w
+
   let run model token =
     let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout in
-    let rec ex symbol =
-	let w = lookup_symbol model symbol in
-	  (match w.Word.code with
-	    | Word.Core (f,_) -> f model;()
-	    | Word.User code -> List.iter (function
-		| Code.PushInt v -> push_int model v
-		| Code.PushFloat v -> push_float model v
-		| Code.Call w -> ex w) code
-	  )
-    in
       (try
 	match model.state with
 	  | Interpreting -> 
 	    (match token with
 	      | Token.Integer value -> push_int model value;()
 	      | Token.Float value -> push_float model value;()
-	      | Token.Word name -> ex name)
+	      | Token.Word name -> execute_symbol model name)
 	  | Compiling -> 
 	    (match token with
 	      | Token.Integer v -> append_opcode model **> Code.PushInt v
@@ -237,7 +244,7 @@ end = struct
 	      | Token.Word name -> 
 		let w = lookup_symbol model name in
 		  (match w.Word.kind with 
-		    | Word.Macro -> ignore(ex name)
+		    | Word.Macro -> ignore(execute_symbol model name)
 		    | Word.Compiled -> append_opcode model **> Code.Call name))
       with
 	| Error.Runtime_Type str -> top_er str
@@ -311,14 +318,12 @@ end = struct
       def "f." Compiled { Types.arguments = ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
       def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
       def "]" Macro { Types.arguments = []; Types.return = [] }    **> (fun model -> 
-	try
 	let code = !(Stack.pop model.codebuf) in
 	  Types.signature_of_code model **> List.rev **> code;
-	  (if Stack.is_empty model.codebuf then push_code model else
-	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code
-	with Stack.Empty ->  model.state <- Interpreting);
+	  (if Stack.is_empty model.codebuf then (model.state <- Interpreting;push_code model) else
+	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code);
       
-      def ".." Macro { Types.arguments = ["code"]; Types.return = [] }   **> (fun model -> 
+      def ".." Compiled { Types.arguments = ["code"]; Types.return = [] }   **> (fun model -> 
 	print_string "[ "; 
 	List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model; 
 	print_string "]"; 
@@ -330,7 +335,12 @@ end = struct
 	  Types.signature_of_code model code;
 	  Dictionary.add model.dict **> Word.def_user name **> code;
 	);
-      def "check" Macro { Types.arguments = ["code"]; Types.return = [] } **> lift1c **>
+      def "!" Compiled { Types.arguments = ["code"]; Types.return = [] } **> lift1c **>
+	(fun code -> 
+	  Run.execute_code model code
+	);
+
+      def "check" Compiled { Types.arguments = ["code"]; Types.return = [] } **> lift1c **>
 	(fun code -> 
 	  Types.print **> Types.signature_of_code model code;
 	  flush stdout;
