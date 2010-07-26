@@ -9,23 +9,28 @@ module Error = struct
   exception Symbol_Not_Bound of string
   exception Parse_Error of string
 end
-module Name = struct
-  type t = string
-end
 
 module Code = struct
-  type opcode = PushInt of int | PushFloat of float | Call of Name.t | PushCode of opcode list
+  type opcode = 
+      PushInt of int 
+    | PushFloat of float 
+    | Call of string 
+    | PushCode of t
+    | App
+  and t = opcode list
 
-  let rec to_string = function
-    | PushInt v -> Printf.sprintf "%d " v
-    | PushFloat v -> Printf.sprintf "%ff " v
-    | Call nm -> Printf.sprintf "%s " nm
-    | PushCode c -> Printf.sprintf "[ %s ]" **> String.concat " " **> List.map to_string c
-  let compile = List.map 
-    (function 
+  let rec to_string = 
+    function
+      | PushInt v -> Printf.sprintf "%d " v
+      | PushFloat v -> Printf.sprintf "%ff " v
+      | Call nm -> Printf.sprintf "%s " nm
+      | PushCode c -> Printf.sprintf "[ %s ]" **> String.concat " " **> List.map to_string c
+
+  let compile = List.map **>
+    function 
       | Lexer.Token.Integer v -> PushInt v 
       | Lexer.Token.Float v -> PushFloat v
-      | Lexer.Token.Word v -> Call v)
+      | Lexer.Token.Word v -> Call v
 end
 
 module Ref = struct
@@ -48,12 +53,12 @@ end
 
 module rec Dictionary : sig 
   type t
-  val lookup : t -> Name.t -> Word.t
+  val lookup : t -> string -> Word.t
   val add    : t -> Word.t -> unit
   val create : unit -> t 
 end = struct
   open Hashtbl
-  type t = (Name.t, Word.t) Hashtbl.t
+  type t = (string, Word.t) Hashtbl.t
   let create() = (Hashtbl.create 1000)
   let lookup = find
   let add dict word = add dict word.Word.name word
@@ -61,13 +66,13 @@ end
 and Word : sig
     type kind = Macro | Compiled
     type code = Core of (Model.t -> unit) * Types.t | User of Code.opcode list
-    type t = { name:Name.t; code:code; kind:kind; }
-    val def : Name.t -> kind -> Types.t -> (Model.t -> unit) -> t
-    val def_user : Name.t -> Code.opcode list -> t
+    type t = { name:string; code:code; kind:kind; }
+    val def : string -> kind -> Types.t -> (Model.t -> unit) -> t
+    val def_user : string -> Code.opcode list -> t
 end = struct
     type kind = Macro | Compiled
     type code = Core of (Model.t -> unit) * Types.t | User of Code.opcode list
-    type t = { name:Name.t; code:code; kind:kind; }
+    type t = { name:string; code:code; kind:kind; }
     let def name kind s code = { name = name; code = Core (code,s); kind = kind }
     let def_user name code = { name = name; code = User code; kind = Compiled }
     let empty name = { name = name; code = User []; kind = Compiled }
@@ -102,7 +107,7 @@ end = struct
   (function 
     | PushInt _ -> push (st "int") stack
     | PushFloat _ -> push (st "float") stack
-    | PushCode c -> 
+    | PushCode c ->
       let { arguments=arguments; return=return } = signature_of_code model c 
       in push (U.Term ("code", arguments)) stack
     | Call name -> 
@@ -110,13 +115,14 @@ end = struct
       let s = signature_of_word model w in
 	List.iter (fun typ -> expect typ) s.arguments;
 	List.iter (fun typ -> push typ stack) **> List.rev s.return;
+    | App -> 
+      expect (U.Term ("code", [U.Var "a"]))
   ) code;
       { arguments = to_list arguments; return = to_list stack }
-  and signature_of_word model word  = 
+  and signature_of_word model word = 
       match word.Word.code with
       | User code -> signature_of_code model code
       | Core (nm,s) -> s
-
 
   let print { return=return; arguments=arguments } =
     print_string "( ";
@@ -150,8 +156,8 @@ and Model : sig
   val pop_float      : t -> float
   val push_code     : t -> Code.opcode list -> unit
   val pop_code      : t -> Code.opcode list
-  val add_symbol     : t -> Word.t -> t
-  val lookup_symbol  : t -> Name.t -> Word.t
+  val add_word     : t -> Word.t -> t
+  val lookup_symbol  : t -> string -> Word.t
   val next_token     : t -> (t -> Lexer.Token.t -> t) -> t
   val append_opcode   : t -> Code.opcode -> unit
 end = struct
@@ -203,7 +209,7 @@ end = struct
     with
 	Empty -> raise Error.Stack_Underflow
 
-  let add_symbol model word = Dictionary.add model.dict word ; model
+  let add_word model word = Dictionary.add model.dict word ; model
   let lookup_symbol model name = try Dictionary.lookup model.dict name with | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
   let next_token model kont = Run.expect model (fun model token -> let m = kont model token in Run.continue model)
   let append_opcode model token = let l = top model.codebuf in l := token::!l
@@ -211,7 +217,7 @@ end
 and Run : sig
   val execute_word : Model.t ->  Word.t -> unit
   val execute_code : Model.t -> Code.opcode list -> unit
-  val execute_symbol : Model.t -> Name.t -> unit
+  val execute_symbol : Model.t -> string -> unit
   val run : Model.t -> Lexer.Token.t -> Model.t
   val expect : Model.t -> (Model.t -> Lexer.Token.t -> Model.t) -> Model.t
   val continue: Model.t -> Model.t
@@ -248,6 +254,7 @@ end = struct
 	    (match token with
 	      | Token.Integer v -> append_opcode model **> Code.PushInt v
 	      | Token.Float v -> append_opcode model **> Code.PushFloat v
+	      | Token.Word "!" -> append_opcode model **> Code.App
 	      | Token.Word name -> 
 		let w = lookup_symbol model name in
 		  (match w.Word.kind with 
@@ -360,7 +367,7 @@ end = struct
 	  let s = Types.signature_of_word model word in 
 	    Types.print s; print_endline ""
 	)
-      ] |> List.fold_left add_symbol model
+      ] |> List.fold_left add_word model
 
 (*
     let run (model,code) token = 
