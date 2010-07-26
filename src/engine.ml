@@ -51,56 +51,67 @@ module Cell = struct
   type t = Value.t
 end
 
-module rec Dictionary : sig 
+module type Named = sig
   type t
-  val lookup : t -> string -> Word.t
-  val add    : t -> Word.t -> unit
-  val create : unit -> t 
-end = struct
-  open Hashtbl
-  type t = (string, Word.t) Hashtbl.t
-  let create() = (Hashtbl.create 1000)
-  let lookup = find
-  let add dict word = add dict word.Word.name word
+  val name : t -> string
 end
-and Word : sig
-    type kind = Macro | Compiled
-    type code = Core of (Model.t -> unit) * Types.t | User of Code.opcode list
-    type t = { name:string; code:code; kind:kind; }
-    val def : string -> kind -> Types.t -> (Model.t -> unit) -> t
-    val def_user : string -> Code.opcode list -> t
-end = struct
-    type kind = Macro | Compiled
-    type code = Core of (Model.t -> unit) * Types.t | User of Code.opcode list
-    type t = { name:string; code:code; kind:kind; }
-    let def name kind s code = { name = name; code = Core (code,s); kind = kind }
-    let def_user name code = { name = name; code = User code; kind = Compiled }
-    let empty name = { name = name; code = User []; kind = Compiled }
+
+module type Symbol = sig
+  type t
+  val name : t -> string
+  val contents : t -> 'a
 end
-and Types : sig
-  type t = { return: U.t list; arguments: U.t list; }
-  val signature_of_code : Model.t -> Code.opcode list -> t
-  val signature_of_word : Model.t -> Word.t -> t
-  val print : t -> unit
-end = struct
-  open Word
-  open Model
-  type t = { return: U.t list; arguments: U.t list; }
-  open Stack
-  open Code
-  let to_list st = let ret = ref [] in iter (fun el -> ret := !ret@[el]) st; !ret
-  let rec signature_of_code model code = 
-    let arguments = Stack.create() in
-    let stack = Stack.create() in
-    let empty st = try top st; false with Empty -> true in
-    let expect typ = 
-      if empty stack then push typ arguments else
-	(let typ' = pop stack in
-	   try
-	     match U.unify (typ', typ) with
-	       | [] ->  push typ' stack
-	       | (_,a)::_ -> push a stack
-	   with _ -> raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ'))))
+
+module Dictionary = struct
+  module type S = sig
+    type t
+    type symbol
+    val create : unit -> t
+    val add_symbol  : t -> symbol -> unit
+    val lookup_symbol : t -> string -> symbol
+  end
+  module Make (Entry : Symbol) : S with type symbol = Entry.t = struct
+    type symbol = Entry.t
+    type t = (string, symbol) Hashtbl.t
+    let create () = Hashtbl.create 1000
+    let add_symbol d w = Hashtbl.add d (Entry.name w) w
+    let lookup_symbol d n = Hashtbl.find d n
+  end
+end
+
+
+module Signatures = struct
+  module type S = sig
+    type dict
+    type symbol
+    type t
+    val of_symbol : dict -> symbol -> t
+    val of_code   : dict -> Code.t -> t
+    val signature : (string list * string list) -> t
+  end
+  module Make (Sym : Symbol) : S 
+    with type symbol = Sym.t = struct
+      module Dict = Dictionary.Make(Sym);;
+      type dict = Dict.t
+      type symbol =  Dict.symbol
+      type t = { return: U.t list; arguments: U.t list; }
+      open Stack
+      open Code
+      let st = List.map (fun x -> U.Term (x,[]))
+      let signature (a,b) = { return = st a; arguments = st b }
+      let to_list st = let ret = ref [] in iter (fun el -> ret := !ret@[el]) st; !ret
+      let rec of_code model code = 
+	let arguments = Stack.create() in
+	let stack = Stack.create() in
+	let empty st = try top st; false with Empty -> true in
+	let expect typ = 
+	  if empty stack then push typ arguments else
+	    (let typ' = pop stack in
+	       try
+		 match U.unify (typ', typ) with
+		   | [] ->  push typ' stack
+		   | (_,a)::_ -> push a stack
+	       with _ -> raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ'))))
     in
     let st nm = U.Term (nm, []) in
       List.iter 
@@ -108,22 +119,22 @@ end = struct
     | PushInt _ -> push (st "int") stack
     | PushFloat _ -> push (st "float") stack
     | PushCode c ->
-      let { arguments=arguments; return=return } = signature_of_code model c 
+      let { arguments=arguments; return=return } = of_code model c 
       in push (U.Term ("code", arguments)) stack
     | Call name -> 
-      let w = lookup_symbol model name in
-      let s = signature_of_word model w in
+      let w = Dict.lookup_symbol model name in
+      let s = of_symbol model w in
 	List.iter (fun typ -> expect typ) s.arguments;
 	List.iter (fun typ -> push typ stack) **> List.rev s.return;
     | App -> 
       expect (U.Term ("code", [U.Var "a"]))
   ) code;
       { arguments = to_list arguments; return = to_list stack }
-  and signature_of_word model word = 
-      match word.Word.code with
-      | User code -> signature_of_code model code
-      | Core (nm,s) -> s
-
+  and of_symbol model word = { arguments = []; return = [] }
+(*      match Sym.contents word with
+	| User code -> of_code model code
+	| Core (nm,s) -> s
+*)
   let print { return=return; arguments=arguments } =
     print_string "( ";
     (for i = 0 to List.length arguments-1 do
@@ -136,41 +147,35 @@ end = struct
       print_string " ";
     done;
     print_string ")";
-    
-	
+    end
 end
-and Model : sig 
-  type state = Interpreting | Compiling
-  type t = 
-      { stack  : Cell.t Stack.t; 
-	cells  : Cell.t array; 
-	dict   : Dictionary.t;
-	lexbuf : Lexing.lexbuf;
-	codebuf: Code.opcode list ref Stack.t;
-	mutable state: state;
-      }
-  val create         : int -> t
-  val push_int       : t -> int -> unit
-  val pop_int        : t -> int
-  val push_float     : t -> float -> unit
-  val pop_float      : t -> float
-  val push_code     : t -> Code.opcode list -> unit
-  val pop_code      : t -> Code.opcode list
-  val add_word     : t -> Word.t -> t
-  val lookup_symbol  : t -> string -> Word.t
-  val next_token     : t -> (t -> Lexer.Token.t -> t) -> t
-  val append_opcode   : t -> Code.opcode -> unit
-end = struct
-  open Stack
-  type state = Interpreting | Compiling
-  type t = 
-      { stack  : Cell.t Stack.t; 
-	cells  : Cell.t array; 
-	dict   : Dictionary.t;
-	lexbuf : Lexing.lexbuf;
-	codebuf: Code.opcode list ref Stack.t;
-	mutable state: state;
-      }
+
+ module rec Module : sig
+    type state = Interpreting | Compiling
+    type t
+    val create        : int -> t
+    val push_value    : t -> Value.t -> unit
+    val pop_value     : t -> Value.t
+    val next_token    : t -> (t -> Lexer.Token.t -> t) -> t
+    val append_opcode : t -> Code.opcode -> unit
+    val stack         : t -> 'a
+    val lookup_symbol : t -> 'a
+    val state         : t -> state
+    val lexbuf        : t -> Lexing.lexbuf
+    module M : Module
+end = struct     
+  module Make (Dict : Dictionary.S) : Module = struct
+   open Stack
+    type state = Interpreting | Compiling
+    module Dictionary = Dict;;
+    type t = 
+	{ stack  : Cell.t Stack.t; 
+	  cells  : Cell.t array; 
+	  dict   : Dictionary.t;
+	  lexbuf : Lexing.lexbuf;
+	  codebuf: Code.opcode list ref Stack.t;
+	  mutable state: state;
+	}
   let create heap_size = 
     let m = { 
       stack  = Stack.create(); 
@@ -182,40 +187,47 @@ end = struct
     } in
       m
 
-  let push_int model i = push (Value.Int i) model.stack
-  let pop_int model =
-    try
-      match pop model.stack with 
-	| Value.Int i -> i
-	| a -> raise (Error.Runtime_Type("Expected type `int' value given is of type is `" ^ Value.to_string a ^ "'!"))
-    with
-	Empty -> raise Error.Stack_Underflow
 
-  let push_float model f = push (Value.Float f) model.stack
-  let push_code model f = push (Value.Code f) model.stack
-  let pop_code model =
-    try
-      match pop model.stack with 
-	| Value.Code i -> i
-	| a -> raise (Error.Runtime_Type("Expected type `code' value given is of type is `" ^ Value.to_string a ^ "'!"))
-    with
-	Empty -> raise Error.Stack_Underflow
-
-  let pop_float model =
-    try
-      match pop model.stack with 
-	| Value.Float i -> i
-	| a -> raise (Error.Runtime_Type("Expected type `float' value given is of type is `" ^ Value.to_string a ^ "'!"))
-    with
-	Empty -> raise Error.Stack_Underflow
-
-  let add_word model word = Dictionary.add model.dict word ; model
-  let lookup_symbol model name = try Dictionary.lookup model.dict name with | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
+  let lookup_symbol model name = try Dictionary.lookup_symbol model.dict name with | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
   let next_token model kont = Run.expect model (fun model token -> let m = kont model token in Run.continue model)
   let append_opcode model token = let l = top model.codebuf in l := token::!l
+  let stack model = model.stack
+  let state w = w.state
+  let lexbuf m = m.lexbuf
+  let push_value m v = push v m.stack
+  let pop_value m = pop m.stack
+  end
+  module M = Make(Dictionary.Make(Word));;
+
 end
-and Run : sig
-  val execute_word : Model.t ->  Word.t -> unit
+and
+ Word : sig
+   type kind = Macro | Compiled
+   type code
+
+  type t = { name:string; code:code; kind:kind; }
+  val def : string -> kind -> 'a -> (Model.M.t -> unit) -> t
+  val def_user : string -> Code.opcode list -> t
+  val contents : t -> 'a
+  val name : t -> string
+  val is_core : t -> bool
+  val fcall : t -> (Model.t -> unit)
+  val code : t -> Code.opcode list
+end = struct
+   type kind = Macro | Compiled
+    type code = Core of (Model.t -> unit) (* * Signature.t *) | User of Code.opcode list
+  type t = { name:string; code:code; kind:kind; }
+    let def name kind s code = { name = name; code = Core (code (*, s *)); kind = kind }
+    let def_user name code = { name = name; code = User code; kind = Compiled }
+    let empty name = { name = name; code = User []; kind = Compiled }
+    let contents w = w.code
+    let name w = w.name
+    let is_core w = match w.code with Core _ -> true | _ -> false
+    let fcall w = match w.code with Core f -> f | _ -> assert (false)
+    let code w = match w.code with User l -> l | _ -> assert (false)
+ end and
+      Run : sig
+	val execute_word : Model.t ->  Word.t -> unit
   val execute_code : Model.t -> Code.opcode list -> unit
   val execute_symbol : Model.t -> string -> unit
   val run : Model.t -> Lexer.Token.t -> Model.t
@@ -226,11 +238,40 @@ end = struct
   open Lexer
   open Model
   open Word
+  open Stack
+    let push_int model i = push (Value.Int i) **> stack model
+    
+  let pop_int model =
+    try
+      match pop **> stack model with 
+	| Value.Int i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `int' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+  
+  let push_float model f = push (Value.Float f) **> stack model
+  
+  let push_code model f = push (Value.Code f) **> stack model
+  
+  let pop_code model =
+    try
+      match pop **> stack model with 
+	| Value.Code i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `code' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+  
+  let pop_float model =
+    try
+      match pop **> stack model with 
+	| Value.Float i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `float' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
 
   let rec execute_word model word =
-	match word.Word.code with
-	    | Word.Core (f,_) -> f model;()
-	    | Word.User code -> execute_code model code
+	if Word.is_core word then Word.fcall word model
+	else execute_code model (Word.code word)
   and execute_code model =
     List.iter (function
       | Code.PushInt v -> push_int model v
@@ -238,13 +279,13 @@ end = struct
       | Code.PushCode v -> execute_code model v
       | Code.Call w -> execute_symbol model w)
   and execute_symbol model symbol = 
-    let w = lookup_symbol model symbol in
+    let w = Model.lookup_symbol model symbol in
       execute_word model w
-
+	
   let run model token =
     let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout in
       (try
-	match model.state with
+	 match state model with
 	  | Interpreting -> 
 	    (match token with
 	      | Token.Integer value -> push_int model value;()
@@ -266,7 +307,7 @@ end = struct
 	| Error.Stack_Underflow -> top_er "Stack underflow!");
       model
 	
-  let expect model kont = Lexer.next_token kont model model.lexbuf
+  let expect model kont = Lexer.next_token kont model **> lexbuf model
   let continue model = expect model run
 
 let start() = 
@@ -278,9 +319,43 @@ end
 and Boostrap : sig
   val init : Model.t -> Model.t
 end = struct
+  open Stack
+  open Model
+     let push_int model i = push (Value.Int i) **> stack model
     
+  let pop_int model =
+    try
+      match pop **> stack model with 
+	| Value.Int i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `int' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+  
+  let push_float model f = push (Value.Float f) **> stack model
+  
+  let push_code model f = push (Value.Code f) **> stack model
+  
+  let pop_code model =
+    try
+      match pop **> stack model with 
+	| Value.Code i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `code' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+  
+  let pop_float model =
+    try
+      match pop **> stack model with 
+	| Value.Float i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `float' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+ 
   open Model
   open Word
+  module Types = Signatures.Make(Word);;
+  module Dictionary = Dictionary.Make(Word);;
+  let add_symbol model word = Dictionary.add_symbol model.dict word ; model
 
   let swap (a,b) = (b,a)
   let init model = 
@@ -323,13 +398,14 @@ end = struct
     in
       [
 	
-      def "+" Compiled { Types.arguments = st ["int";"int"]; Types.return = st ["int"] }  **> app2i ( + );
-      def "f+" Compiled { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
+      def "+" Compiled (Types.signature (["int";"int"], ["int"])) **> app2i ( + );
+      def "f+" Compiled (Types.signature (["float";"float"], ["float"]))  **> app2f ( +. );
 
 (*      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 ( / ); 
 *)
+(*
       def "." Compiled { Types.arguments = st ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
       def "f." Compiled { Types.arguments = st ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
       def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
@@ -366,8 +442,8 @@ end = struct
 	  let word = lookup_symbol model name in
 	  let s = Types.signature_of_word model word in 
 	    Types.print s; print_endline ""
-	)
-      ] |> List.fold_left add_word model
+	)*)
+      ] |> List.fold_left add_symbol model
 
 (*
     let run (model,code) token = 
