@@ -12,13 +12,13 @@ end
 
 module Code = struct
   type opcode = 
-      PushInt of int 
+    | PushInt of int 
     | PushFloat of float 
     | Call of string 
     | PushCode of t
     | App
   and t = opcode list
-
+      
   let rec to_string = 
     function
       | PushInt v -> Printf.sprintf "%d " v
@@ -26,25 +26,22 @@ module Code = struct
       | Call nm -> Printf.sprintf "%s " nm
       | PushCode c -> Printf.sprintf "[ %s ]" **> String.concat " " **> List.map to_string c
 
-  let compile = List.map **>
-    function 
-      | Lexer.Token.Integer v -> PushInt v 
-      | Lexer.Token.Float v -> PushFloat v
-      | Lexer.Token.Word v -> Call v
-end
-
-module Ref = struct
-  type t = int
+  let compile = 
+    List.map **>
+      function 
+	| Lexer.Token.Integer v -> PushInt v 
+	| Lexer.Token.Float v -> PushFloat v
+	| Lexer.Token.Word v -> Call v
 end
 
 module Value = struct
-  type t = Int of int | Float of float | Ref of Ref.t | Empty | Code of Code.opcode list
-  let to_string = function
-    | Int _ -> "int"
-    | Float _ -> "float"
-    | Ref _ -> "ref"
-    | Empty -> "empty"
-    | Code _ -> "code"
+  type t = Int of int | Float of float | Empty | Code of Code.opcode list
+  let to_string = 
+    function
+      | Int _ -> "int"
+      | Float _ -> "float"
+      | Empty -> "empty"
+      | Code _ -> "code"
 end
 
 module Cell = struct
@@ -63,6 +60,7 @@ end = struct
   let lookup = find
   let add dict word = add dict word.Word.name word
 end
+
 and Word : sig
     type kind = Macro | Compiled
     type code = Core of (Model.t -> unit) * Types.t | User of Code.opcode list
@@ -77,6 +75,7 @@ end = struct
     let def_user name code = { name = name; code = User code; kind = Compiled }
     let empty name = { name = name; code = User []; kind = Compiled }
 end
+
 and Types : sig
   type t = { return: U.t list; arguments: U.t list; }
   val signature_of_code : Model.t -> Code.opcode list -> t
@@ -86,45 +85,72 @@ end = struct
   open Word
   open Model
   type t = { return: U.t list; arguments: U.t list; }
-  open Stack
   open Code
-  let to_list st = let ret = ref [] in iter (fun el -> ret := !ret@[el]) st; !ret
+  open BatList
   let rec signature_of_code model code = 
     let arguments = Stack.create() in
     let stack = Stack.create() in
     let expect typ = 
-      if is_empty stack then 
-	push typ arguments 
+      if Stack.is_empty stack then 
+	Stack.push typ arguments 
       else
-	let typ' = pop stack in
+	let typ' = Stack.pop stack in
 	  try
 	    match U.unify (typ', typ) with
-	      | [] ->  push typ' stack
-	      | (_,a)::_ -> push a stack
+	      | [] ->  Stack.push typ' stack
+	      | (_,a)::_ -> Stack.push a stack
 	  with _ -> raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ')))
     in
+    let normalize_arguments arg_types fun_arg_types =
+      let arg_types = (take **> List.length fun_arg_types) **> arg_types in
+      let arg_types = 
+	if List.length arg_types != List.length fun_arg_types then
+	  let cut_count = List.length fun_arg_types - List.length arg_types in
+	  let cut_args = List.rev **> take cut_count **> List.rev fun_arg_types in
+	    arg_types @ cut_args
+	else arg_types in
+	arg_types
+    in
+    let fun_app_check arg_types fun_arg_types =
+      let arg_types = normalize_arguments arg_types fun_arg_types in
+      let terms = List.combine arg_types fun_arg_types in
+      let check ((typ,typ') as t) = 
+	try
+	  U.unify t
+	with _ -> 
+	  raise
+	    (Error.Runtime_Type 
+	       (Printf.sprintf "AAA:Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ')))
+      in
+	List.concat **> List.map check terms
+    in
     let st nm = U.Term (nm, []) in
+    let to_list st = let ret = ref [] in Stack.iter (fun el -> ret := !ret@[el]) st; !ret
+    in
       List.iter 
-  (function 
-    | PushInt _ -> push (st "int") stack
-    | PushFloat _ -> push (st "float") stack
-    | PushCode c ->
-      let { arguments=arguments; return=return } = signature_of_code model c 
-      in push (U.Term ("code", arguments)) stack
-    | Call name -> 
-      let w = lookup_symbol model name in
-      let s = signature_of_word model w in
-	List.iter (fun typ -> expect typ) s.arguments;
-	List.iter (fun typ -> push typ stack) **> List.rev s.return;
-    | App -> 
-      expect (U.Term ("code", [U.Var "a"]))
-  ) code;
+	(function 
+	  | PushInt _ -> Stack.push (st "int") stack
+	  | PushFloat _ -> Stack.push (st "float") stack
+	  | PushCode c ->
+	    let { arguments=arguments; return=return } = signature_of_code model c 
+	    in Stack.push (U.Term ("code", arguments)) stack
+	  | Call name -> 
+	    let w = lookup_symbol model name in
+	    let s = signature_of_word model w in
+	    let l = normalize_arguments (to_list stack) s.arguments in
+(*	      List.iter (fun x -> print_endline **> U.to_string x) l; *)
+	      fun_app_check (to_list stack) s.arguments;
+	      List.iter (fun typ -> expect typ) s.arguments;
+	      List.iter (fun typ -> Stack.push typ stack) **> List.rev s.return;
+	  | App -> 
+	    expect (U.Term ("code", [U.Var "a"]))
+	) code;
       { arguments = to_list arguments; return = to_list stack }
   and signature_of_word model word = 
-      match word.Word.code with
+    match word.Word.code with
       | User code -> signature_of_code model code
       | Core (nm,s) -> s
-
+	
   let print { return=return; arguments=arguments } =
     print_string "( ";
     (for i = 0 to List.length arguments-1 do
@@ -369,29 +395,6 @@ end = struct
 	    Types.print s; print_endline ""
 	)
       ] |> List.fold_left add_word model
-
-(*
-    let run (model,code) token = 
-      let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout; model in
-	try
-	  (match token with
-	    | Token.Integer value -> push_int model value
-	    | Token.Word name -> perform_symbol model name);
-	  model
-	with
-	  | Error.Runtime_Type str -> top_er str
-	  | Error.Symbol_Not_Bound str -> top_er str
-	  | Error.Stack_Underflow -> top_er "Stack underflow!"
-      
-  let rec loop_until model f p =
-    let model = Lexer.next_token f (model,[]) model.lexbuf in
-      loop_until model f
-
-    let comp
-  let create model name =
-  add_symbol model empty
-*)
-
 end
 
 let main () =  Run.start()

@@ -57,5 +57,15 @@ let rec to_string =
 	Printf.sprintf "(%s %s)" nm) **> String.concat " " **> List.map to_string l
     | Var (nm) -> Printf.sprintf "%s" nm
 
+open List
+let apply_all subs exps =
+  let rec loop exps prev =
+  if prev = exps then 
+    exps 
+  else loop (fold_left (fun exp sub -> map (apply subs) exps) exps subs) exps
+  in
+    loop exps []
+
+
 end
 
