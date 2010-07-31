@@ -92,15 +92,16 @@ end = struct
   let rec signature_of_code model code = 
     let arguments = Stack.create() in
     let stack = Stack.create() in
-    let empty st = try top st; false with Empty -> true in
     let expect typ = 
-      if empty stack then push typ arguments else
-	(let typ' = pop stack in
-	   try
-	     match U.unify (typ', typ) with
-	       | [] ->  push typ' stack
-	       | (_,a)::_ -> push a stack
-	   with _ -> raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ'))))
+      if is_empty stack then 
+	push typ arguments 
+      else
+	let typ' = pop stack in
+	  try
+	    match U.unify (typ', typ) with
+	      | [] ->  push typ' stack
+	      | (_,a)::_ -> push a stack
+	  with _ -> raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ')))
     in
     let st nm = U.Term (nm, []) in
       List.iter 
