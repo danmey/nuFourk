@@ -28,19 +28,19 @@ let compose s2 s1 =
   map (fun (v,t) -> v,(apply s1 t)) s2 @ 
     filter (fun (v,_) -> try i <|> assoc v s2; false with Not_found -> true) s1
 
-exception Unify_fail
+exception Unify_fail of string * string
 
 let rec unify = function
   | Var(n), t -> 
       if Var(n) = t then [] else
-	if occurs t n then raise (Unify_fail)
+	if occurs t n then raise (Unify_fail (n,"OCCUR"))
 	else [n,t]
   | t, Var(n) ->
       if Var(n) = t then [] else
-	if occurs t n then raise (Unify_fail)
+	if occurs t n then raise (Unify_fail ("OCCUR",n))
 	else [n,t]
   | Term(n1, t1), Term(n2, t2) ->
-      if n1 <> n2 then raise Unify_fail
+      if n1 <> n2 then raise (Unify_fail (n1,n2))
       else
 	fold_left 
 	  (fun s (t1',t2') -> 

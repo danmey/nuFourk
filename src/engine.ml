@@ -90,17 +90,6 @@ end = struct
   let rec signature_of_code model code = 
     let arguments = Stack.create() in
     let stack = Stack.create() in
-    let expect typ = 
-      if Stack.is_empty stack then 
-	Stack.push typ arguments 
-      else
-	let typ' = Stack.pop stack in
-	  try
-	    match U.unify (typ', typ) with
-	      | [] ->  Stack.push typ' stack
-	      | (_,a)::_ -> Stack.push a stack
-	  with _ -> raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ')))
-    in
     let normalize_arguments arg_types fun_arg_types =
       let arg_types = (take **> List.length fun_arg_types) **> arg_types in
       let arg_types = 
@@ -109,43 +98,56 @@ end = struct
 	  let cut_args = List.rev **> take cut_count **> List.rev fun_arg_types in
 	    arg_types @ cut_args
 	else arg_types in
-	arg_types
+	List.combine arg_types fun_arg_types
+    in
+    let expect typ = 
+      if Stack.is_empty stack then 
+	Stack.push typ arguments 
+      else
+	let _,typ' = Stack.pop stack in
+	  try
+	    ignore **> List.map U.unify (normalize_arguments typ' typ)
+	  with _ -> 
+	    let l a = String.concat " " **> List.map U.to_string a in
+	    raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (l typ) (l typ')))
     in
     let fun_app_check arg_types fun_arg_types =
-      let arg_types = normalize_arguments arg_types fun_arg_types in
-      let terms = List.combine arg_types fun_arg_types in
-      let check ((typ,typ') as t) = 
+      let arguments, _ = List.split arg_types in
+      let terms = normalize_arguments arguments fun_arg_types in
+      let check t = 
 	try
-	  U.unify t
-	with _ -> 
+	  ignore(List.map U.unify t)
+	with (U.Unify_fail (n1,n2)) -> 
 	  raise
 	    (Error.Runtime_Type 
-	       (Printf.sprintf "AAA:Expected type `%s', found `%s'!" (U.to_string typ) (U.to_string typ')))
+	       (Printf.sprintf "AAA:Expected type `%s', found `%s'!" n1 n2))
       in
-	List.concat **> List.map check terms
+	check terms
     in
-    let st nm = U.Term (nm, []) in
+    let st nm = [],[U.Term (nm, [])] in
     let to_list st = let ret = ref [] in Stack.iter (fun el -> ret := !ret@[el]) st; !ret
     in
       List.iter 
 	(function 
 	  | PushInt _ -> Stack.push (st "int") stack
 	  | PushFloat _ -> Stack.push (st "float") stack
-	  | PushCode c ->
+(*	  | PushCode c ->
 	    let { arguments=arguments; return=return } = signature_of_code model c 
-	    in Stack.push (U.Term ("code", arguments)) stack
+	    in Stack.push (arguments, return) stack
+*)
 	  | Call name -> 
 	    let w = lookup_symbol model name in
 	    let s = signature_of_word model w in
-	    let l = normalize_arguments (to_list stack) s.arguments in
+(*	    let l = normalize_arguments (to_list stack) s.arguments in *)
 (*	      List.iter (fun x -> print_endline **> U.to_string x) l; *)
-	      fun_app_check (to_list stack) s.arguments;
-	      List.iter (fun typ -> expect typ) s.arguments;
-	      List.iter (fun typ -> Stack.push typ stack) **> List.rev s.return;
+	      fun_app_check (to_list stack); (* s.arguments; *)
+(*	      expect s.arguments; *)
+(*	      List.iter (fun typ -> Stack.push typ stack) **> List.rev s.return; *)
 	  | App -> 
-	    expect (U.Term ("code", [U.Var "a"]))
+	    expect [];
+	    
 	) code;
-      { arguments = to_list arguments; return = to_list stack }
+      { arguments = List.concat ( List.map snd (to_list arguments)); return = List.concat ( List.map snd (to_list stack)) }
   and signature_of_word model word = 
     match word.Word.code with
       | User code -> signature_of_code model code
