@@ -125,28 +125,18 @@ end = struct
 	check terms
     in
     let st nm = [],[U.Term (nm, [])] in
-    let to_list st = let ret = ref [] in Stack.iter (fun el -> ret := !ret@[el]) st; !ret
-    in
-      List.iter 
-	(function 
+    let to_list st = let ret = ref [] in Stack.iter (fun el -> ret := !ret@[el]) st; !ret in
+    let stack_effects = function 
 	  | PushInt _ -> Stack.push (st "int") stack
 	  | PushFloat _ -> Stack.push (st "float") stack
-(*	  | PushCode c ->
-	    let { arguments=arguments; return=return } = signature_of_code model c 
-	    in Stack.push (arguments, return) stack
-*)
 	  | Call name -> 
 	    let w = lookup_symbol model name in
 	    let s = signature_of_word model w in
-(*	    let l = normalize_arguments (to_list stack) s.arguments in *)
-(*	      List.iter (fun x -> print_endline **> U.to_string x) l; *)
-	      fun_app_check (to_list stack); (* s.arguments; *)
-(*	      expect s.arguments; *)
-(*	      List.iter (fun typ -> Stack.push typ stack) **> List.rev s.return; *)
+	      fun_app_check **> to_list stack
 	  | App -> 
-	    expect [];
-	    
-	) code;
+	    expect []
+    in
+      List.iter stack_effects code;
       { arguments = List.concat ( List.map snd (to_list arguments)); return = List.concat ( List.map snd (to_list stack)) }
   and signature_of_word model word = 
     match word.Word.code with
