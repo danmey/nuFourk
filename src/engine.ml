@@ -120,7 +120,7 @@ end = struct
 	with (U.Unify_fail (n1,n2)) -> 
 	  raise
 	    (Error.Runtime_Type 
-	       (Printf.sprintf "AAA:Expected type `%s', found `%s'!" n1 n2))
+	       (Printf.sprintf "AAA:Expected type `%s', found `%s'!" n2 n1))
       in
 	check terms
     in
@@ -132,12 +132,14 @@ end = struct
 	  | Call name -> 
 	    let w = lookup_symbol model name in
 	    let s = signature_of_word model w in
-	      fun_app_check **> to_list stack
+	      ()
+(*	      fun_app_check (to_list stack) s.arguments *)
 	  | App -> 
 	    expect []
     in
       List.iter stack_effects code;
-      { arguments = List.concat ( List.map snd (to_list arguments)); return = List.concat ( List.map snd (to_list stack)) }
+      { arguments = []; return = [] }
+(*      { arguments = List.concat ( List.map snd (to_list arguments)); return = List.concat ( List.map snd (to_list stack)) } *)
   and signature_of_word model word = 
     match word.Word.code with
       | User code -> signature_of_code model code
@@ -340,47 +342,48 @@ end = struct
     let with_flush f a = f a; flush stdout in
     let st = List.map (fun x -> U.Term (x,[]))
     in
+    let macro name signature body = def name Macro signature body in
+    let def name signature body = def name Compiled signature body in
       [
-	
-      def "+" Compiled { Types.arguments = st ["int";"int"]; Types.return = st ["int"] }  **> app2i ( + );
-      def "f+" Compiled { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
+      def "+" { Types.arguments = st ["int";"int"]; Types.return = st ["int"] }  **> app2i ( + );
+      def "f+"  { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
 
 (*      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 ( / ); 
 *)
-      def "." Compiled { Types.arguments = st ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
-      def "f." Compiled { Types.arguments = st ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
-      def "[" Macro { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
-      def "]" Macro { Types.arguments = []; Types.return = [U.Term ("code", [U.Var "a";U.Var "b"])] }    **> (fun model -> 
+      def "."  { Types.arguments = st ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
+      def "f."  { Types.arguments = st ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
+      macro "[" { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
+      macro "]" { Types.arguments = []; Types.return = [U.Term ("code", [U.Var "a";U.Var "b"])] }    **> (fun model -> 
 	let code = !(Stack.pop model.codebuf) in
 	  Types.signature_of_code model **> List.rev **> code;
 	  (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code model) else
 	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code);
       
-      def ".." Compiled { Types.arguments = st ["code"]; Types.return = [] }   **> (fun model -> 
+      def ".."  { Types.arguments = st ["code"]; Types.return = [] }   **> (fun model -> 
 	print_string "[ "; 
 	List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model; 
 	print_string "]"; 
 	flush stdout);
-      def ":" Macro { Types.arguments = []; Types.return = [] } **> 
+      macro ":"  { Types.arguments = []; Types.return = [] } **> 
 	tok1 **> 
 	(fun model name -> 
 	  let code = pop_code model in
 	  Types.signature_of_code model code;
 	  Dictionary.add model.dict **> Word.def_user name **> code;
 	);
-      def "!" Compiled { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [U.Var "b"] } **> lift1c **>
+      def "!"  { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [U.Var "b"] } **> lift1c **>
 	(fun code -> 
 	  Run.execute_code model code
 	);
 
-      def "check" Compiled { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [] } **> lift1c **>
+      def "check" { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [] } **> lift1c **>
 	(fun code -> 
 	  Types.print **> Types.signature_of_code model code;
 	  flush stdout;
 	);
-      def "type" Macro { Types.arguments = []; Types.return = [] } **> tok **> with_flush 
+      macro "type"  { Types.arguments = []; Types.return = [] } **> tok **> with_flush 
 	(fun name ->
 	  let word = lookup_symbol model name in
 	  let s = Types.signature_of_word model word in 
