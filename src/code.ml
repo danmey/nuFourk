@@ -21,4 +21,3 @@ let compile =
       | Lexer.Token.Integer v -> PushInt v 
       | Lexer.Token.Float v -> PushFloat v
       | Lexer.Token.Word v -> Call v
-
