@@ -2,7 +2,7 @@ open BatLexing
 open BatPervasives
 open BatOption
 open BatList
-open Unification
+open Unify
 
 module Error = struct
   exception Runtime_Type of string
