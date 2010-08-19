@@ -1,6 +1,7 @@
 open BatLexing
 open BatPervasives
 open BatOption
+open BatList
 open Unification
 
 module Error = struct
@@ -38,10 +39,10 @@ module Value = struct
   type t = Int of int | Float of float | Empty | Code of Code.opcode list
   let to_string = 
     function
-      | Int _ -> "int"
+      | Int   _ -> "int"
       | Float _ -> "float"
-      | Empty -> "empty"
-      | Code _ -> "code"
+      | Empty   -> "empty"
+      | Code  _ -> "code"
 end
 
 module Cell = struct
@@ -175,12 +176,12 @@ and Model : sig
   val pop_int        : t -> int
   val push_float     : t -> float -> unit
   val pop_float      : t -> float
-  val push_code     : t -> Code.opcode list -> unit
-  val pop_code      : t -> Code.opcode list
-  val add_word     : t -> Word.t -> t
+  val push_code      : t -> Code.opcode list -> unit
+  val pop_code       : t -> Code.opcode list
+  val add_word       : t -> Word.t -> t
   val lookup_symbol  : t -> string -> Word.t
   val next_token     : t -> (t -> Lexer.Token.t -> t) -> t
-  val append_opcode   : t -> Code.opcode -> unit
+  val append_opcode  : t -> Code.opcode -> unit
 end = struct
   open Stack
   type state = Interpreting | Compiling
@@ -345,14 +346,14 @@ end = struct
     let macro name signature body = def name Macro signature body in
     let def name signature body = def name Compiled signature body in
       [
-      def "+" { Types.arguments = st ["int";"int"]; Types.return = st ["int"] }  **> app2i ( + );
-      def "f+"  { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
+      def "+"  { Types.arguments = st ["int"; "int"]; Types.return = st ["int"] }  **> app2i ( + );
+      def "f+" { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
 
 (*      def "-" Compiled **> app2 ( - );
       def "*" Compiled **> app2 ( * );
       def "/" Compiled **> app2 ( / ); 
 *)
-      def "."  { Types.arguments = st ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
+      def "."   { Types.arguments = st ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
       def "f."  { Types.arguments = st ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
       macro "[" { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
       macro "]" { Types.arguments = []; Types.return = [U.Term ("code", [U.Var "a";U.Var "b"])] }    **> (fun model -> 
