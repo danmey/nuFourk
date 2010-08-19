@@ -11,31 +11,6 @@ module Error = struct
   exception Parse_Error of string
 end
 
-module Code = struct
-
-  type opcode = 
-    | PushInt of int 
-    | PushFloat of float 
-    | Call of string 
-    | PushCode of t
-    | App
-  and t = opcode list
-      
-  let rec to_string = 
-    function
-      | PushInt v -> Printf.sprintf "%d " v
-      | PushFloat v -> Printf.sprintf "%ff " v
-      | Call nm -> Printf.sprintf "%s " nm
-      | PushCode c -> Printf.sprintf "[ %s ]" **> String.concat " " **> List.map to_string c
-
-  let compile = 
-    List.map **>
-      function 
-	| Lexer.Token.Integer v -> PushInt v 
-	| Lexer.Token.Float v -> PushFloat v
-	| Lexer.Token.Word v -> Call v
-end
-
 module Value = struct
 
   type t = 
@@ -471,6 +446,7 @@ end = struct
     let def name signature body = def name Compiled signature body in
       [
 	def "+"  { Types.arguments = st ["int"; "int"]; Types.return = st ["int"] }  **> app2i ( + );
+
 	def "f+" { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
 
 (*      def "-" Compiled **> app2 ( - );
