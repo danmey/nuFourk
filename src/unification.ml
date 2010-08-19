@@ -8,9 +8,10 @@ let ($) f g = (fun a -> f (g a))
 let (<|>) f g = f g
 
 module U = struct
-type t = Var of string 
-	 | Term of string * t list
 
+type t =
+  | Var of string 
+  | Term of string * t list
 
 let rec vars = function
   | Var n' -> [n']
