@@ -75,7 +75,7 @@ and Word : sig
       | Compiled
 
     type code =
-      | Core of (Model.t -> unit) * Types.t
+      | Core of (Model.t -> unit) * Type.signature
       | User of Code.opcode list
 
     type t = {
@@ -84,7 +84,7 @@ and Word : sig
       kind:kind;
     }
 
-    val def      : string -> kind -> Types.t -> (Model.t -> unit) -> t
+    val def      : string -> kind -> Type.signature -> (Model.t -> unit) -> t
     val def_user : string -> Code.opcode list -> t
 
 end = struct
@@ -94,7 +94,7 @@ end = struct
       | Compiled
 
     type code =
-      | Core of (Model.t -> unit) * Types.t
+      | Core of (Model.t -> unit) * Type.signature
       | User of Code.opcode list
 
     type t = {
@@ -126,8 +126,9 @@ and Types : sig
     arguments : U.t list;
   }
 
-  val signature_of_code : Model.t -> Code.opcode list -> t
-  val signature_of_word : Model.t -> Word.t -> t
+
+  (* val signature_of_code : Model.t -> Code.opcode list -> t *)
+  (* val signature_of_word : Model.t -> Word.t -> t *)
   val print : t -> unit
 
 end = struct
@@ -142,7 +143,7 @@ end = struct
     arguments : U.t list;
   }
 
-      
+(*      
   let rec signature_of_code model code =
     let arguments = Stack.create() in
     let stack = Stack.create() in
@@ -202,10 +203,12 @@ end = struct
       { arguments = []; return = [] }
 (*      { arguments = List.concat ( List.map snd (to_list arguments)); return = List.concat ( List.map snd (to_list stack)) } *)
 
+
   and signature_of_word model word =
     match word.Word.code with
       | User code -> signature_of_code model code
       | Core (nm,s) -> s
+*)
 
   let print {
     return = return;
@@ -415,7 +418,8 @@ end = struct
 
   open Model
   open Word
-
+  open Type
+    
   let swap (a,b) = (b,a)
   let init model =
     let app_pair f model =
@@ -459,12 +463,12 @@ end = struct
 
     let st = List.map (fun x -> U.Term (x,[]))
     in
-
+      
+    let tsig (i,o) = { Type.input = i; Type.output = o; } in
     let macro name signature body = def name Macro signature body in
-
     let def name signature body = def name Compiled signature body in
       [
-	def "+"  { Types.arguments = st ["int"; "int"]; Types.return = st ["int"] }  **> app2i ( + );
+	def "+"  (tsig ( [ int_type; int_type ], [ int_type ] ) ) **> app2i ( + );
 (*
 	def "f+" { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
 
@@ -504,11 +508,12 @@ end = struct
 	  flush stdout;
 	);
       *)
-      macro "type"  { Types.arguments = []; Types.return = [] } **> tok **> with_flush
+      macro "type" void_signature **> tok **> with_flush
 	(fun name ->
 	  let word = lookup_symbol model name in
-	  let s = Types.signature_of_word model word in
-	    Types.print s; print_endline ""
+	  let signature = match word.code with | Core (_, s) -> s | _ -> failwith "!!" in
+	  let s = Type.signature_to_string signature in
+	    print_endline s
 	)
       ] |> List.fold_left add_word model
 end
