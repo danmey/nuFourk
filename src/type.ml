@@ -39,9 +39,9 @@ type dictionary = func list
 
 let basic_type name = U.Term ( name, [ ] )
 
-let t_int = basic_type "int"
+let int_type = basic_type "int"
 
-let t_float = basic_type "float"
+let float_type = basic_type "float"
 
 let closure_type {
   input = input;
@@ -78,8 +78,8 @@ let rec check dictionary ( {
   in
 
   function
-    | PushInt _     -> { current with output = t_int :: output }
-    | PushFloat _   -> { current with output = t_float :: output }
+    | PushInt _     -> { current with output = int_type :: output }
+    | PushFloat _   -> { current with output = float_type :: output }
     | PushCode code -> { current with output = closure_type (check_type dictionary current code) :: output }
     | Call name     ->
       let { input = input'; output = output' } = List.assoc name dictionary

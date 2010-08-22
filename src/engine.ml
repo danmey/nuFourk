@@ -142,7 +142,7 @@ end = struct
     arguments : U.t list;
   }
 
-
+      
   let rec signature_of_code model code =
     let arguments = Stack.create() in
     let stack = Stack.create() in
@@ -465,7 +465,7 @@ end = struct
     let def name signature body = def name Compiled signature body in
       [
 	def "+"  { Types.arguments = st ["int"; "int"]; Types.return = st ["int"] }  **> app2i ( + );
-
+(*
 	def "f+" { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
 
 (*      def "-" Compiled **> app2 ( - );
@@ -503,6 +503,7 @@ end = struct
 	  Types.print **> Types.signature_of_code model code;
 	  flush stdout;
 	);
+      *)
       macro "type"  { Types.arguments = []; Types.return = [] } **> tok **> with_flush
 	(fun name ->
 	  let word = lookup_symbol model name in
