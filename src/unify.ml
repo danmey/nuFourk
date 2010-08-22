@@ -74,7 +74,7 @@ let rec to_string =
 	Printf.sprintf "%s %s" nm
       else
 	Printf.sprintf "(%s %s)" nm) **> String.concat " " **> List.map to_string l
-    | Var (nm) -> Printf.sprintf "%s" nm
+    | Var (nm) -> Printf.sprintf "%s'" nm
 
 open List
 let apply_all subs exps =

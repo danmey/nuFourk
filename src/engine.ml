@@ -414,11 +414,11 @@ end = struct
     let st = List.map (fun x -> U.Term (x,[]))
     in
       
-    let tsig (i,o) = { Type.input = i; Type.output = o; } in
+    let tsig i o = { Type.input = i; Type.output = o; } in
     let macro name signature body = Word.def name Word.Macro signature body in
     let def name signature body = Word.def name Word.Compiled signature body in
       [
-	def "+"  (tsig ( [ int_type; int_type ], [ int_type ] ) ) **> app2i ( + );
+	def "+"  (tsig [ int_type; int_type ] [ int_type ] ) **> app2i ( + );
 (*
 	def "f+" { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
 
@@ -458,7 +458,7 @@ end = struct
 	  flush stdout;
 	);
       *)
-	def "drop" (tsig ( [ U.Var ( "a" ) ], [ ] )) **> (fun () -> ignore( Model.pop_value()));
+	def "drop" ( tsig [ U.Var ( "a" ) ] [ ] ) **> (fun () -> ignore( Model.pop_value()));
 	def "type" void_signature **> (fun () ->
 	  let name = match Lexer.next_token Model.model.Model.lexbuf with
 	    | Lexer.Token.Word w -> w
