@@ -86,13 +86,14 @@ let rec check dictionary ( {
       in
 	{ input = apply_func (input', output);
 	  output = output' }
+
 and check_type dictionary current = 
   List.fold_left (check dictionary) current
 
-let signature_to_string ( {
+let signature_to_string {
   input = input;
   output = output;
-} as current ) =
+} =
   let aux = String.concat " -> " -| List.map U.to_string in
   let input_str = aux input in
   let output_str = aux output in

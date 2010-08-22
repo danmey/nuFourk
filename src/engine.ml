@@ -133,7 +133,6 @@ and Types : sig
 
 end = struct
 
-  open Word
   open Model
   open Code
   open BatList
@@ -349,7 +348,6 @@ end = struct
 
   open Lexer
   open Model
-  open Word
 
   let rec execute_word model word =
     match word.Word.code with
@@ -417,7 +415,6 @@ and Boostrap : sig
 end = struct
 
   open Model
-  open Word
   open Type
     
   let swap (a,b) = (b,a)
@@ -465,8 +462,8 @@ end = struct
     in
       
     let tsig (i,o) = { Type.input = i; Type.output = o; } in
-    let macro name signature body = def name Macro signature body in
-    let def name signature body = def name Compiled signature body in
+    let macro name signature body = Word.def name Word.Macro signature body in
+    let def name signature body = Word.def name Word.Compiled signature body in
       [
 	def "+"  (tsig ( [ int_type; int_type ], [ int_type ] ) ) **> app2i ( + );
 (*
@@ -511,7 +508,7 @@ end = struct
       macro "type" void_signature **> tok **> with_flush
 	(fun name ->
 	  let word = lookup_symbol model name in
-	  let signature = match word.code with | Core (_, s) -> s | _ -> failwith "!!" in
+	  let signature = match word.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
 	  let s = Type.signature_to_string signature in
 	    print_endline s
 	)
