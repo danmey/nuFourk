@@ -50,45 +50,7 @@ module Cell = struct
   type t = Value.t
 end
 
-module rec Dictionary : sig
-
-  type t
-
-  val lookup : t -> string -> Word.t
-  val add    : t -> Word.t -> unit
-  val create : unit -> t
-
-end = struct
-
-  open Hashtbl
-
-  type t = (string, Word.t) Hashtbl.t
-  let create() = (Hashtbl.create 1000)
-  let lookup = find
-  let add dict word = add dict word.Word.name word
-end
-
-and Word : sig
-
-    type kind =
-      | Macro
-      | Compiled
-
-    type code =
-      | Core of (unit -> unit) * Type.signature
-      | User of Code.opcode list
-
-    type t = {
-      name:string;
-      code:code;
-      kind:kind;
-    }
-
-    val def      : string -> kind -> Type.signature -> (unit -> unit) -> t
-    val def_user : string -> Code.opcode list -> t
-
-end = struct
-
+module Word = struct
     type kind =
       | Macro
       | Compiled
@@ -119,7 +81,17 @@ end = struct
       kind = Compiled }
 end
 
-and Types : sig
+module Dictionary = struct
+  open Hashtbl
+
+  type t = (string, Word.t) Hashtbl.t
+  let create() = (Hashtbl.create 1000)
+  let lookup = find
+  let add dict word = add dict word.Word.name word
+end
+
+
+(*and Types : sig
 
   type t = {
     return    : U.t list;
@@ -228,7 +200,8 @@ end = struct
     print_string ")";
 
 end
-and Model : sig
+*)
+module rec Model : sig
 
   type state =
     | Interpreting
@@ -483,7 +456,7 @@ end = struct
 	  flush stdout;
 	);
       *)
-(*
+
       macro "type" void_signature **> tok **> with_flush
 	(fun name ->
 	  let word = lookup_symbol name in
@@ -491,7 +464,7 @@ end = struct
 	  let s = Type.signature_to_string signature in
 	    print_endline s
 	)
-*)
+
       ] |> List.iter add_word;
       Model.model
 end
