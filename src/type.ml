@@ -17,8 +17,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --------------------------------------------------------------------------*)
 
 open Unify
-
-(* open BatList *)
+open Code
+open BatList
+open BatPervasives
 
 type signature = {
   input  : U.t list;
@@ -48,7 +49,7 @@ let closure_type {
 } =
   U.Term ( "closure",
 	   [
-	     U.Term ( "input", input ),
+	     U.Term ( "input", input );
 	     U.Term ( "output", output )
 	   ])
 
@@ -72,19 +73,23 @@ let rec check dictionary ( {
       | input, [] -> input
       | [], x :: xs -> x :: apply_func ([], xs)
       | x :: xs, y :: ys ->
-	if x <> y then type_error [x] [y]
+	if x <> y then type_error x y
 	else x :: apply_func (xs, ys)
   in
 
   function
     | PushInt _     -> { current with output = t_int :: output }
     | PushFloat _   -> { current with output = t_float :: output }
-    | PushCode code -> { current with output = closure_type (check dictionary current code) :: output }
+    | PushCode code -> { current with output = closure_type (check_type dictionary current code) :: output }
     | Call name     ->
-      let { input = input'; output = output' } = assoc dictionary name
+      let { input = input'; output = output' } = List.assoc name dictionary
       in
 	{ input = apply_func (input', output);
 	  output = output' }
+and check_type dictionary current = 
+  List.fold_left (check dictionary) current
+    
+(*
     | App ->
       match output with
 	| func :: output ->
@@ -96,7 +101,7 @@ let rec check dictionary ( {
 			 U.Term ( "output", output' ) ) ->
 		if output <> output' then type_error output output'
 		else { current with output = output  input }
-
+*)
 
 
 (*
