@@ -222,6 +222,7 @@ module rec Model : sig
   val pop_float      : unit -> float
   val push_code      : Code.opcode list -> unit
   val pop_code       : unit -> Code.opcode list
+  val pop_value      : unit -> Value.t
   val add_word       : Word.t -> unit
   val lookup_symbol  : string -> Word.t
   val append_opcode  : Code.opcode -> unit
@@ -264,6 +265,7 @@ end = struct
 
   let push_code f = push (Value.Code f) model.stack
 
+  let pop_value () = pop model.stack
   let pop_code () =
     try
       match pop model.stack with
@@ -456,18 +458,19 @@ end = struct
 	  flush stdout;
 	);
       *)
-
-      def "type" void_signature **> (fun () ->
-	let name = match Lexer.next_token Model.model.Model.lexbuf with
-	  | Lexer.Token.Word w -> w
+	def "drop" (tsig ( [ U.Var ( "a" ) ], [ ] )) **> (fun () -> ignore( Model.pop_value()));
+	def "type" void_signature **> (fun () ->
+	  let name = match Lexer.next_token Model.model.Model.lexbuf with
+	    | Lexer.Token.Word w -> w
 	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'") 
-	in
-	let word = lookup_symbol name in
-	let signature = match word.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
-	let s = Type.signature_to_string signature in
-	  print_endline s)
+	  in
+	  let word = lookup_symbol name in
+	  let signature = match word.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
+	  let s = Type.signature_to_string signature in
+	    print_endline s)
       ] |> List.iter add_word;
       Model.model
+
 end
 
 let main () =  Run.start()
