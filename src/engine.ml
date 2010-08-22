@@ -386,7 +386,7 @@ end = struct
 
     let app2i op () = app2 op push_int pop_int in
 
-    let app2f op = app2 op push_float pop_float in
+    let app2f op () = app2 op push_float pop_float in
 
     let lift1 f pop model =
       let a = pop () in
@@ -415,22 +415,24 @@ end = struct
     in
       
     let tsig i o = { Type.input = i; Type.output = o; } in
+    let sig_bin_op typ = tsig [ int_type; int_type ] [ int_type ] in
     let macro name signature body = Word.def name Word.Macro signature body in
     let def name signature body = Word.def name Word.Compiled signature body in
+    let def_bin_op name typ body = def name (sig_bin_op typ) body in
       [
-	def "+"  (tsig [ int_type; int_type ] [ int_type ] ) **> app2i ( + );
-(*
-	def "f+" { Types.arguments = st ["float";"float"]; Types.return = st ["float"] }  **> app2f ( +. );
+	def_bin_op "+" int_type **> app2i ( + );
+	def_bin_op "-" int_type **> app2i ( - );
+	def_bin_op "/" int_type **> app2i ( / );
+	def_bin_op "*" int_type **> app2i ( * );
 
-(*      def "-" Compiled **> app2 ( - );
-      def "*" Compiled **> app2 ( * );
-      def "/" Compiled **> app2 ( / );
-*)
-      def "."   { Types.arguments = st ["int"]; Types.return = [] } **> lift1i **> with_flush print_int;
-      def "f."  { Types.arguments = st ["float"]; Types.return = [] } **> lift1f **> with_flush print_float;
-      macro "[" { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
-      macro "]" { Types.arguments = []; Types.return = [U.Term ("code", [U.Var "a";U.Var "b"])] }    **> (fun model ->
-	let code = !(Stack.pop model.codebuf) in
+	def_bin_op "f+" float_type **> app2f ( +. );
+	def_bin_op "f-" float_type **> app2f ( -. );
+	def_bin_op "f/" float_type **> app2f ( /. );
+	def_bin_op "f*" float_type **> app2f ( *. );
+
+	(* macro "[" { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling); *)
+	(* macro "]" { Types.arguments = []; Types.return = [U.Term ("code", [U.Var "a";U.Var "b"])] }    **> (fun model -> *)
+(*	let code = !(Stack.pop model.codebuf) in
 	  Types.signature_of_code model **> List.rev **> code;
 	  (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code model) else
 	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code);
