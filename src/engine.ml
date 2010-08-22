@@ -75,7 +75,7 @@ and Word : sig
       | Compiled
 
     type code =
-      | Core of (Model.t -> unit) * Type.signature
+      | Core of (unit -> unit) * Type.signature
       | User of Code.opcode list
 
     type t = {
@@ -84,7 +84,7 @@ and Word : sig
       kind:kind;
     }
 
-    val def      : string -> kind -> Type.signature -> (Model.t -> unit) -> t
+    val def      : string -> kind -> Type.signature -> (unit -> unit) -> t
     val def_user : string -> Code.opcode list -> t
 
 end = struct
@@ -94,7 +94,7 @@ end = struct
       | Compiled
 
     type code =
-      | Core of (Model.t -> unit) * Type.signature
+      | Core of (unit -> unit) * Type.signature
       | User of Code.opcode list
 
     type t = {
@@ -133,7 +133,6 @@ and Types : sig
 
 end = struct
 
-  open Model
   open Code
   open BatList
 
@@ -243,18 +242,17 @@ and Model : sig
     codebuf: Code.opcode list ref Stack.t;
     mutable state: state;
   }
-
-  val create         : int -> t
-  val push_int       : t -> int -> unit
-  val pop_int        : t -> int
-  val push_float     : t -> float -> unit
-  val pop_float      : t -> float
-  val push_code      : t -> Code.opcode list -> unit
-  val pop_code       : t -> Code.opcode list
-  val add_word       : t -> Word.t -> t
-  val lookup_symbol  : t -> string -> Word.t
-  val next_token     : t -> (t -> Lexer.Token.t -> t) -> t
-  val append_opcode  : t -> Code.opcode -> unit
+  val model          : t
+  val push_int       : int -> unit
+  val pop_int        : unit -> int
+  val push_float     : float -> unit
+  val pop_float      : unit -> float
+  val push_code      : Code.opcode list -> unit
+  val pop_code       : unit -> Code.opcode list
+  val add_word       : Word.t -> unit
+  val lookup_symbol  : string -> Word.t
+  val next_token     : (t -> Lexer.Token.t -> t) -> unit
+  val append_opcode  : Code.opcode -> unit
 
 end = struct
   open Stack
@@ -271,21 +269,18 @@ end = struct
     codebuf: Code.opcode list ref Stack.t;
     mutable state: state;
   }
-
-  let create heap_size =
-    let m = {
+  let heap_size = 1000
+  let model = {
       stack   = Stack.create();
       cells   = Array.create heap_size Value.Empty;
       dict    = Dictionary.create();
       lexbuf  = from_input stdin;
       codebuf = Stack.create();
       state   = Interpreting }
-    in
-      m
 
-  let push_int model i = push (Value.Int i) model.stack
+  let push_int i = push (Value.Int i) model.stack
 
-  let pop_int model =
+  let pop_int () =
     try
       match pop model.stack with
 	| Value.Int i -> i
@@ -293,11 +288,11 @@ end = struct
     with
 	Empty -> raise Error.Stack_Underflow
 
-  let push_float model f = push (Value.Float f) model.stack
+  let push_float f = push (Value.Float f) model.stack
 
-  let push_code model f = push (Value.Code f) model.stack
+  let push_code f = push (Value.Code f) model.stack
 
-  let pop_code model =
+  let pop_code () =
     try
       match pop model.stack with
 	| Value.Code i -> i
@@ -305,7 +300,7 @@ end = struct
     with
 	Empty -> raise Error.Stack_Underflow
 
-  let pop_float model =
+  let pop_float () =
     try
       match pop model.stack with
 	| Value.Float i -> i
@@ -313,98 +308,97 @@ end = struct
     with
 	Empty -> raise Error.Stack_Underflow
 
-  let add_word model word =
-    Dictionary.add model.dict word;
-    model
+  let add_word word =
+    Dictionary.add model.dict word; ()
 
-  let lookup_symbol model name =
+  let lookup_symbol name =
     try
       Dictionary.lookup model.dict name
     with
       | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
 
-  let next_token model kont =
-    Run.expect model
-      (fun model token ->
+  let next_token kont =
+    Run.expect
+      (fun token ->
 	let m = kont model token
-	in Run.continue model)
+	in Run.continue token)
 
-  let append_opcode model token =
+  let append_opcode token =
     let l = top model.codebuf
     in
       l := token::!l
 end
 and Run : sig
 
-  val execute_word   : Model.t ->  Word.t -> unit
-  val execute_code   : Model.t -> Code.opcode list -> unit
-  val execute_symbol : Model.t -> string -> unit
-  val run            : Model.t -> Lexer.Token.t -> Model.t
-  val expect         : Model.t -> (Model.t -> Lexer.Token.t -> Model.t) -> Model.t
-  val continue       : Model.t -> Model.t
+  val execute_word   : Model.t -> Word.t -> unit
+  val execute_code   : Code.opcode list -> unit
+  val execute_symbol : string -> unit
+  val run            : unit -> Lexer.Token.t -> Lexing.lexbuf
+  val expect :
+    (Lexing.lexbuf -> Lexer.Token.t -> Lexing.lexbuf) ->
+    Lexing.lexbuf -> 'a
+
+  val continue       : unit -> unit
   val start          : unit -> Model.t
 
 end = struct
 
   open Lexer
-  open Model
 
   let rec execute_word model word =
     match word.Word.code with
-      | Word.Core (f,_) -> f model;()
-      | Word.User code -> execute_code model code
+      | Word.Core (f,_) -> f()
+      | Word.User code -> execute_code code
 
-  and execute_code model =
+  and execute_code value =
     List.iter
       (function
-	| Code.PushInt v -> push_int model v
-	| Code.PushFloat v -> push_float model v
-	| Code.PushCode v -> execute_code model v
-	| Code.Call w -> execute_symbol model w)
+	| Code.PushInt v   -> Model.push_int v
+	| Code.PushFloat v -> Model.push_float v
+	| Code.PushCode v  -> execute_code v
+	| Code.Call w      -> execute_symbol w) value
 
-  and execute_symbol model symbol =
-    let w = lookup_symbol model symbol
+  and execute_symbol symbol =
+    let w = Model.lookup_symbol symbol
     in
-      execute_word model w
+      execute_word Model.model w
 
-  let run model token =
+  let run _ token =
     let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout in
 
       begin
 	try
-	  match model.state with
-	    | Interpreting ->
+	  match Model.model.Model.state with
+	    | Model.Interpreting ->
 	      (match token with
-		| Token.Integer value -> push_int model value;()
-		| Token.Float value -> push_float model value;()
-		| Token.Word name -> execute_symbol model name)
-	    | Compiling ->
+		| Token.Integer value -> Model.push_int value;()
+		| Token.Float value -> Model.push_float value;()
+		| Token.Word name -> execute_symbol name)
+	    | Model.Compiling ->
 	      (match token with
-		| Token.Integer v -> append_opcode model **> Code.PushInt v
-		| Token.Float v -> append_opcode model **> Code.PushFloat v
-		| Token.Word "!" -> append_opcode model **> Code.App
+		| Token.Integer v -> Model.append_opcode **> Code.PushInt v
+		| Token.Float v -> Model.append_opcode **> Code.PushFloat v
+		| Token.Word "!" -> Model.append_opcode **> Code.App
 		| Token.Word name ->
-		  let w = lookup_symbol model name in
+		  let w = Model.lookup_symbol name in
 		    (match w.Word.kind with
-		      | Word.Macro -> ignore(execute_symbol model name)
-		      | Word.Compiled -> append_opcode model **> Code.Call name))
+		      | Word.Macro -> ignore(execute_symbol name)
+		      | Word.Compiled -> Model.append_opcode **> Code.Call name))
 	with
 	  | Error.Runtime_Type str -> top_er str
 	  | Error.Symbol_Not_Bound str -> top_er str
 	  | Error.Stack_Underflow -> top_er "Stack underflow!"
       end;
-      model
+      Model.model.Model.lexbuf
 
-  let expect model kont =
-    Lexer.next_token kont model model.lexbuf
+  let expect kont =
+    Lexer.next_token kont Model.model.Model.lexbuf
 
-  let continue model = expect model run
+  let continue = expect run
 
   let start() =
-    let model = Model.create 1000
-    in
-      Boostrap.init model;
-      continue model
+    Boostrap.init Model.model;
+    continue
 
 end
 
@@ -419,21 +413,21 @@ end = struct
     
   let swap (a,b) = (b,a)
   let init model =
-    let app_pair f model =
-      swap (f model, f model)
+    let app_pair f =
+      swap (f (), f ())
     in
 
-    let app2 op pushv pop model =
-      let (a,b) = app_pair pop model in
-	op a b |> pushv model
+    let app2 op pushv pop =
+      let (a, b) = app_pair pop in
+	op a b |> pushv
     in
 
-    let app2i op = app2 op push_int pop_int in
+    let app2i op () = app2 op push_int pop_int in
 
     let app2f op = app2 op push_float pop_float in
 
     let lift1 f pop model =
-      let a = pop model in
+      let a = pop () in
 	f a
     in
 
@@ -441,15 +435,14 @@ end = struct
     let lift1f f model = lift1 f pop_float model in
     let lift1c f model = lift1 f pop_code model in
 
-    let tok f model = Model.next_token model
-      (fun model ->
-	(function
-	  | Lexer.Token.Word w -> f w; model
+    let tok f = Model.next_token
+	(fun _ -> function
+	  | Lexer.Token.Word w -> f w; Model.model
 	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'"
-	  ))); ()
+	  )); ()
     in
 
-    let tok1 f model = Model.next_token model
+    let tok1 f model = Model.next_token
       (fun model -> function
 	| Lexer.Token.Word w -> f model w; model
 	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
@@ -505,14 +498,17 @@ end = struct
 	  flush stdout;
 	);
       *)
+(*
       macro "type" void_signature **> tok **> with_flush
 	(fun name ->
-	  let word = lookup_symbol model name in
+	  let word = lookup_symbol name in
 	  let signature = match word.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
 	  let s = Type.signature_to_string signature in
 	    print_endline s
 	)
-      ] |> List.fold_left add_word model
+*)
+      ] |> List.iter add_word;
+      Model.model
 end
 
 let main () =  Run.start()
