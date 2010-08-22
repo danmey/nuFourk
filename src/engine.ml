@@ -397,7 +397,7 @@ end = struct
 
     let tok f = 
       match Lexer.next_token Model.model.Model.lexbuf with
-	| Lexer.Token.Word w -> f w; Model.model
+	| Lexer.Token.Word w -> f w
 	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
     in
 
@@ -457,14 +457,15 @@ end = struct
 	);
       *)
 
-      macro "type" void_signature **> tok **> with_flush
-	(fun name ->
-	  let word = lookup_symbol name in
-	  let signature = match word.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
-	  let s = Type.signature_to_string signature in
-	    print_endline s
-	)
-
+      def "type" void_signature **> (fun () ->
+	let name = match Lexer.next_token Model.model.Model.lexbuf with
+	  | Lexer.Token.Word w -> w
+	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'") 
+	in
+	let word = lookup_symbol name in
+	let signature = match word.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
+	let s = Type.signature_to_string signature in
+	  print_endline s)
       ] |> List.iter add_word;
       Model.model
 end
