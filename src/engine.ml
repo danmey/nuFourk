@@ -251,7 +251,6 @@ and Model : sig
   val pop_code       : unit -> Code.opcode list
   val add_word       : Word.t -> unit
   val lookup_symbol  : string -> Word.t
-  val next_token     : (t -> Lexer.Token.t -> t) -> unit
   val append_opcode  : Code.opcode -> unit
 
 end = struct
@@ -317,12 +316,6 @@ end = struct
     with
       | Not_found -> raise (Error.Symbol_Not_Bound ( "Symbol `" ^ name ^ "' is not found in this context!"))
 
-  let next_token kont =
-    Run.expect
-      (fun token ->
-	let m = kont model token
-	in Run.continue token)
-
   let append_opcode token =
     let l = top model.codebuf
     in
@@ -333,12 +326,7 @@ and Run : sig
   val execute_word   : Model.t -> Word.t -> unit
   val execute_code   : Code.opcode list -> unit
   val execute_symbol : string -> unit
-  val run            : unit -> Lexer.Token.t -> Lexing.lexbuf
-  val expect :
-    (Lexing.lexbuf -> Lexer.Token.t -> Lexing.lexbuf) ->
-    Lexing.lexbuf -> 'a
-
-  val continue       : unit -> unit
+  val run            : Lexer.Token.t -> unit
   val start          : unit -> Model.t
 
 end = struct
@@ -363,7 +351,7 @@ end = struct
     in
       execute_word Model.model w
 
-  let run _ token =
+  let run token =
     let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout in
 
       begin
@@ -388,17 +376,16 @@ end = struct
 	  | Error.Runtime_Type str -> top_er str
 	  | Error.Symbol_Not_Bound str -> top_er str
 	  | Error.Stack_Underflow -> top_er "Stack underflow!"
-      end;
-      Model.model.Model.lexbuf
-
-  let expect kont =
-    Lexer.next_token kont Model.model.Model.lexbuf
-
-  let continue = expect run
+      end
 
   let start() =
     Boostrap.init Model.model;
-    continue
+    let rec loop () = 
+      let token = Lexer.next_token Model.model.Model.lexbuf in
+	run token;
+	loop ()
+    in
+      loop ()
 
 end
 
@@ -435,18 +422,16 @@ end = struct
     let lift1f f model = lift1 f pop_float model in
     let lift1c f model = lift1 f pop_code model in
 
-    let tok f = Model.next_token
-	(fun _ -> function
-	  | Lexer.Token.Word w -> f w; Model.model
-	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'"
-	  )); ()
+    let tok f = 
+      match Lexer.next_token Model.model.Model.lexbuf with
+	| Lexer.Token.Word w -> f w; Model.model
+	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
     in
 
-    let tok1 f model = Model.next_token
-      (fun model -> function
-	| Lexer.Token.Word w -> f model w; model
-	| _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
-      ); ()
+    let tok1 f model = match Lexer.next_token Model.model.Model.lexbuf with
+      | Lexer.Token.Word w -> f model w; model
+      | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
+      
     in
 
     let with_flush f a = f a; flush stdout in
