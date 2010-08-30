@@ -63,19 +63,20 @@ let type_error signature signature' =
   in
   raise (Type_error str)
 
+
 let rec check dictionary ( {
   input = input;
   output = output;
 } as current ) =
 
-  let rec apply_func =
-    function
-      | input, [] -> input
-      | [], x :: xs -> x :: apply_func ([], xs)
+let rec apply_func =
+  function
+    | input, [] -> input
+    | [], x :: xs -> x :: apply_func ([], xs)
       | x :: xs, y :: ys ->
 	if x <> y then type_error x y
 	else x :: apply_func (xs, ys)
-  in
+in
 
   function
     | PushInt _     -> { current with output = int_type :: output }
@@ -99,6 +100,26 @@ let signature_to_string {
   let output_str = aux output in
     String.concat " : " [ input_str; output_str ]
 
+let check_two { output = output } { input = input } =
+  let rec combine a b =
+    match a,b with
+      | [], _ -> []
+      | a, [] -> []
+      | a::xs, b::ys -> (a,b) :: combine xs ys in
+  let combined = combine output input in
+  let rec loop combined =
+    let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined in
+      match subst with
+	| [] -> combined
+	| _ -> let o, i = List.split combined in
+	       let o', i' = U.apply_all subst o, U.apply_all subst i in
+		 loop (List.combine o' i')
+  in
+  let result = loop combined in
+    List.iter (fun (a,b) -> print_endline (U.to_string a); print_endline (U.to_string b)) result
+
+    
+  
 (*
     | App ->
       match output with

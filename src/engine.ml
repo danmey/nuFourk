@@ -409,7 +409,7 @@ end = struct
       
     in
 
-    let with_flush f a = f a; flush stdout in
+    let with_flush f () = f (); flush stdout in
 
     let st = List.map (fun x -> U.Term (x,[]))
     in
@@ -429,14 +429,21 @@ end = struct
 	def_bin_op "f-" float_type **> app2f ( -. );
 	def_bin_op "f/" float_type **> app2f ( /. );
 	def_bin_op "f*" float_type **> app2f ( *. );
-
-	(* macro "[" { Types.arguments = []; Types.return = [] }**> (fun model -> Stack.push (ref []) model.codebuf; model.state <- Compiling); *)
-	(* macro "]" { Types.arguments = []; Types.return = [U.Term ("code", [U.Var "a";U.Var "b"])] }    **> (fun model -> *)
-(*	let code = !(Stack.pop model.codebuf) in
-	  Types.signature_of_code model **> List.rev **> code;
-	  (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code model) else
-	      (fun l -> append_opcode model **> Code.PushCode l)) **> List.rev code);
-
+	
+	def "." ( tsig [ int_type ] [ ] ) **>
+	  with_flush (fun () ->
+	    let v = Model.pop_int () in
+	      Printf.printf "%d" v);
+	    
+	macro "[" void_signature **> (fun () -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
+	macro "]" (tsig [] [ U.Term ("code", [U.Var "a"; U.Var "b"]) ]) **> 
+	  (fun () -> 
+	    let code = !(Stack.pop model.codebuf) in
+	      (*	  Type.signature_of_code model **> List.rev **> code; *)
+	      (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code) else
+		  (fun l -> append_opcode **> Code.PushCode l)) **> List.rev code);
+	
+(*
       def ".."  { Types.arguments = st ["code"]; Types.return = [] }   **> (fun model ->
 	print_string "[ ";
 	List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model;
@@ -449,11 +456,14 @@ end = struct
 	  Types.signature_of_code model code;
 	  Dictionary.add model.dict **> Word.def_user name **> code;
 	);
-      def "!"  { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [U.Var "b"] } **> lift1c **>
+*)
+      def "!"  (tsig [U.Term ("code", [U.Var "a";U.Var "b"])] [U.Var "b"] ) **> lift1c **>
 	(fun code ->
-	  Run.execute_code model code
+	  Run.execute_code code
 	);
 
+	
+(*
       def "check" { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [] } **> lift1c **>
 	(fun code ->
 	  Types.print **> Types.signature_of_code model code;
@@ -469,8 +479,25 @@ end = struct
 	  let word = lookup_symbol name in
 	  let signature = match word.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
 	  let s = Type.signature_to_string signature in
-	    print_endline s)
+	    print_endline s);
+
+	def "type2" void_signature **> (fun () ->
+	  let name1 = match Lexer.next_token Model.model.Model.lexbuf with
+	    | Lexer.Token.Word w -> w
+	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'") 
+	  in
+	  let name2 = match Lexer.next_token Model.model.Model.lexbuf with
+	    | Lexer.Token.Word w -> w
+	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'") 
+	  in
+	  let word1 = lookup_symbol name1 in
+	  let word2 = lookup_symbol name2 in
+	  let signature1 = match word1.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
+	  let signature2 = match word2.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
+	  Type.check_two signature1 signature2
+	);
       ] |> List.iter add_word;
+
       Model.model
 
 end
