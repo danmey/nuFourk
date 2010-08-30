@@ -470,6 +470,7 @@ end = struct
 	  flush stdout;
 	);
       *)
+
 	def "drop" ( tsig [ U.Var ( "a" ) ] [ ] ) **> (fun () -> ignore( Model.pop_value()));
 	def "type" void_signature **> (fun () ->
 	  let name = match Lexer.next_token Model.model.Model.lexbuf with
@@ -481,7 +482,7 @@ end = struct
 	  let s = Type.signature_to_string signature in
 	    print_endline s);
 
-	def "type2" void_signature **> (fun () ->
+	def "type2" void_signature **> with_flush (fun () ->
 	  let name1 = match Lexer.next_token Model.model.Model.lexbuf with
 	    | Lexer.Token.Word w -> w
 	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'") 
@@ -494,7 +495,7 @@ end = struct
 	  let word2 = lookup_symbol name2 in
 	  let signature1 = match word1.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
 	  let signature2 = match word2.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
-	  Type.check_two signature1 signature2
+	  Type.check_pair signature1 signature2
 	);
       ] |> List.iter add_word;
 
