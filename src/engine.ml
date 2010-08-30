@@ -189,7 +189,7 @@ end = struct
       print_string **> U.to_string **> List.nth arguments i;
 	print_string " ";
     done;
-
+u1
     print_string "-> ";
 
     for i = 0 to List.length return-1 do
@@ -415,7 +415,7 @@ end = struct
     in
       
     let tsig i o = { Type.input = i; Type.output = o; } in
-    let sig_bin_op typ = tsig [ int_type; int_type ] [ int_type ] in
+    let sig_bin_op typ = tsig [ typ; typ ] [ typ ] in
     let macro name signature body = Word.def name Word.Macro signature body in
     let def name signature body = Word.def name Word.Compiled signature body in
     let def_bin_op name typ body = def name (sig_bin_op typ) body in
