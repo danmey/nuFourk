@@ -107,23 +107,17 @@ type stack_effect =
   let null_effect = Accepting []
 
   let rec check_effects l r effect =
-    let rec unify_types combined =
+    let rec unify_types prev combined =
       let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined in
 	match subst with
 	  | [] -> combined
 	  | _ -> 
-	    let o, i = List.split combined in
-	    let o', i' = U.apply_all subst o, U.apply_all subst i in
-	      unify_types (List.combine o' i')
+	    if List.length prev = List.length subst then combined 
+	    else
+		let o, i = List.split combined in
+		let o', i' = U.apply_all subst o, U.apply_all subst i in
+		  unify_types subst (List.combine o' i')
     in
-(*
-    let merge_stack_effect old current =
-      match old, current with
-	| Accepting b, Accepting a -> Accepting (a @ b)
-	| Leaving a, Accepting b -> check_effects a b null_effect
-	| Accepting a, Leaving b -> Accepting a
-    in
-*)
     let rec combine a b =
       match a,b with
 	| [], b -> Accepting b, []
@@ -132,14 +126,17 @@ type stack_effect =
 	  let effect, result = combine xs ys 
 	  in  effect, (a,b) :: result in
     let effect, combined = combine l r in
-      (match effect with
-	| Accepting a -> Printf.printf "Accepts: %s" (String.concat " -> " (List.map U.to_string a))
-	| Leaving a -> Printf.printf "Leaves: %s" (String.concat " -> " (List.map U.to_string a)));
-	effect, unify_types combined
-  
-  let check_pair { output = output } { input = input; output = output' } =
-    check_effects output input null_effect    
-  
+    let o, i = List.split (unify_types [] combined) in
+      match effect with
+	| Leaving a -> { output = a; input = [] }
+	| Accepting a -> { input = a; output = [] }
+	  
+  let check_pair { input = input1; output = output1 } { input = input2; output = output2 } =
+    let { input = input'; output = output' } = check_effects output1 input2 null_effect 
+    in
+      { input = input1 @ input'; output = output' @ output2 }
+
+
 (*
     | App ->
       match output with

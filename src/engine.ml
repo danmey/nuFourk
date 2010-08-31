@@ -429,7 +429,18 @@ end = struct
 	def_bin_op "f-" float_type **> app2f ( -. );
 	def_bin_op "f/" float_type **> app2f ( /. );
 	def_bin_op "f*" float_type **> app2f ( *. );
-	
+	def "swap" (tsig [U.Var "a"; U.Var "b"] [U.Var "b"; U.Var "a"]) (fun () -> push_int 1);
+	def "i" (tsig [] [int_type]) (fun () -> push_int 1);
+	def "f" (tsig [] [float_type]) (fun () -> push_float 1.);
+
+	def "if->i" (tsig [int_type;float_type] [int_type]) (fun () -> ());
+	def "if->f" (tsig [int_type;float_type] [float_type]) (fun () -> ());
+	def "->i" (tsig [int_type] []) (fun () -> ());
+	def "->f" (tsig [float_type] []) (fun () -> ());
+	def "i->f" (tsig [int_type] [float_type]) (fun () -> ());
+	def "f->i" (tsig [float_type] [int_type]) (fun () -> ());
+
+
 	def "." ( tsig [ int_type ] [ ] ) **>
 	  with_flush (fun () ->
 	    let v = Model.pop_int () in
@@ -495,7 +506,7 @@ end = struct
 	  let word2 = lookup_symbol name2 in
 	  let signature1 = match word1.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
 	  let signature2 = match word2.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
-	  Type.check_pair signature1 signature2
+	    print_endline **> signature_to_string (Type.check_pair signature1 signature2)
 	);
       ] |> List.iter add_word;
 
