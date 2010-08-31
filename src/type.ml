@@ -107,16 +107,14 @@ type stack_effect =
   let null_effect = Accepting []
 
   let rec check_effects l r effect =
-    let rec unify_types prev combined =
+    let rec unify_types combined =
       let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined in
 	match subst with
 	  | [] -> combined
 	  | _ -> 
-	    if List.length prev = List.length subst then combined 
-	    else
-		let o, i = List.split combined in
-		let o', i' = U.apply_all subst o, U.apply_all subst i in
-		  unify_types subst (List.combine o' i')
+	    let o, i = List.split combined in
+	    let o', i' = U.apply_all subst o, U.apply_all subst i in
+	      unify_types (List.combine o' i')
     in
     let rec combine a b =
       match a,b with
@@ -126,7 +124,7 @@ type stack_effect =
 	  let effect, result = combine xs ys 
 	  in  effect, (a,b) :: result in
     let effect, combined = combine l r in
-    let o, i = List.split (unify_types [] combined) in
+    let o, i = List.split (unify_types combined) in
       match effect with
 	| Leaving a -> { output = a; input = [] }
 	| Accepting a -> { input = a; output = [] }
