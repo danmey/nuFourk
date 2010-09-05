@@ -136,6 +136,19 @@ type stack_effect =
     in
       { input = input1 @ input'; output = output' @ output2 }
 
+  let signature_of_code dict =
+    let of_opcode = function
+      | PushInt _ -> { input = []; output = [int_type] }
+      | PushFloat _ -> { input = []; output = [float_type] }
+      | Call name -> List.assoc name dict
+    in
+    let rec loop previous = function
+      | current :: rest -> loop (check_pair previous (of_opcode current)) rest
+      | [] -> previous
+    in
+      function
+	| current :: rest -> loop (of_opcode current) rest
+	| [] -> void_signature
 
 (*
     | App ->

@@ -302,7 +302,7 @@ end = struct
       match word.Word.code with
 	| Word.Core (_, signature) -> (name, signature) :: acc
 	| _ -> acc) model.dict []
-    
+
 end
 and Run : sig
 
@@ -486,16 +486,15 @@ end = struct
 	  List.iter (fun (name, signature) -> Printf.printf "%s :: %s\n" name (Type.signature_to_string signature)) dict);
 
 	
-(*
-      def "check" { Types.arguments = [U.Term ("code", [U.Var "a";U.Var "b"])]; Types.return = [] } **> lift1c **>
+
+      def "check" (tsig [U.Term ("code", [U.Var "a";U.Var "b"])] []) **> lift1c **>
 	(fun code ->
-	  Types.print **> Types.signature_of_code model code;
+	  print_endline **> Type.signature_to_string **> Type.signature_of_code (Model.get_core_dict ()) code;
 	  flush stdout;
 	);
-      *)
 
-	def "drop" ( tsig [ U.Var ( "a" ) ] [ ] ) **> (fun () -> ignore( Model.pop_value()));
-	def "type" void_signature **> (fun () ->
+      def "drop" ( tsig [ U.Var ( "a" ) ] [ ] ) **> (fun () -> ignore( Model.pop_value()));
+      def "type" void_signature **> (fun () ->
 	  let name = match Lexer.next_token Model.model.Model.lexbuf with
 	    | Lexer.Token.Word w -> w
 	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'") 
