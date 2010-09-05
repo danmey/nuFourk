@@ -224,6 +224,7 @@ module rec Model : sig
   val pop_code       : unit -> Code.opcode list
   val pop_value      : unit -> Value.t
   val add_word       : Word.t -> unit
+  val get_core_dict  : unit -> Type.dictionary
   val lookup_symbol  : string -> Word.t
   val append_opcode  : Code.opcode -> unit
 
@@ -295,6 +296,13 @@ end = struct
     let l = top model.codebuf
     in
       l := token::!l
+
+  let get_core_dict () =
+    Hashtbl.fold (fun name word acc ->
+      match word.Word.code with
+	| Word.Core (_, signature) -> (name, signature) :: acc
+	| _ -> acc) model.dict []
+    
 end
 and Run : sig
 
@@ -472,6 +480,10 @@ end = struct
 	(fun code ->
 	  Run.execute_code code
 	);
+
+      def "words" void_signature **> with_flush (fun () ->
+	let dict = Model.get_core_dict () in
+	  List.iter (fun (name, signature) -> Printf.printf "%s :: %s\n" name (Type.signature_to_string signature)) dict);
 
 	
 (*
