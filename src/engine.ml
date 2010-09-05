@@ -447,6 +447,7 @@ end = struct
 	def "->f" (tsig [float_type] []) (fun () -> ());
 	def "i->f" (tsig [int_type] [float_type]) (fun () -> ());
 	def "f->i" (tsig [float_type] [int_type]) (fun () -> ());
+	def "f->if" (tsig [float_type] [int_type;float_type]) (fun () -> ());
 
 
 	def "." ( tsig [ int_type ] [ ] ) **>
@@ -484,8 +485,6 @@ end = struct
       def "words" void_signature **> with_flush (fun () ->
 	let dict = Model.get_core_dict () in
 	  List.iter (fun (name, signature) -> Printf.printf "%s :: %s\n" name (Type.signature_to_string signature)) dict);
-
-	
 
       def "check" (tsig [U.Term ("code", [U.Var "a";U.Var "b"])] []) **> lift1c **>
 	(fun code ->

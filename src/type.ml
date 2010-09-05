@@ -134,7 +134,7 @@ type stack_effect =
   let check_pair { input = input1; output = output1 } { input = input2; output = output2 } =
     let { input = input'; output = output' } = check_effects output1 input2 null_effect 
     in
-      { input = input1 @ input'; output = output' @ output2 }
+      { input = input1 @ input'; output = output2 @ output'  }
 
   let signature_of_code dict =
     let of_opcode = function
