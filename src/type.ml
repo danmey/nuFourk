@@ -116,6 +116,7 @@ type stack_effect =
 	    let o', i', effect' = U.apply_all subst o, U.apply_all subst i, U.apply_all subst effect in
 	      unify_types (List.combine o' i') effect'
     in
+
     let rec combine a b =
       match a,b with
 	| [], b -> Accepting b, []
@@ -123,6 +124,7 @@ type stack_effect =
 	| a::xs, b::ys -> 
 	  let effect, result = combine xs ys 
 	  in  effect, (a,b) :: result in
+
     let effect, combined = combine l r in
     let e = match effect with Leaving a -> a | Accepting a -> a in
     let effect', combined' = unify_types combined e in
@@ -136,18 +138,19 @@ type stack_effect =
     in
       { input = input1 @ input'; output = output2 @ output'  }
 
-  let signature_of_code dict =
+  let signature_of_code dict opcodes =
     let of_opcode = function
       | PushInt _ -> { input = []; output = [int_type] }
       | PushFloat _ -> { input = []; output = [float_type] }
       | Call name -> List.assoc name dict
     in
     let rec loop previous = function
-      | current :: rest -> loop (check_pair previous (of_opcode current)) rest
+      | current :: rest -> loop (check_pair previous current) rest
       | [] -> previous
     in
-      function
-	| current :: rest -> loop (of_opcode current) rest
+    let effects' = List.map of_opcode opcodes in
+      match effects' with
+	| current :: rest -> loop current rest
 	| [] -> void_signature
 
 (*
