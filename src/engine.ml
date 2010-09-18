@@ -516,7 +516,7 @@ end = struct
 	  let word2 = lookup_symbol name2 in
 	  let signature1 = match word1.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
 	  let signature2 = match word2.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
-	    print_endline **> signature_to_string (Type.check_pair signature1 signature2)
+	    print_endline **> signature_to_string (Type.check_pair [] signature1 signature2)
 	);
       ] |> List.iter add_word;
 

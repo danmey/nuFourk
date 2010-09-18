@@ -106,7 +106,7 @@ type stack_effect =
 
   let null_effect = Accepting []
 
-  let rec check_effects l r effect =
+  let rec check_effects signatures l r effect =
     let rec unify_types combined effect =
       let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined in
 	match subst with
@@ -133,8 +133,8 @@ type stack_effect =
 	| Leaving a -> { output = effect'; input = [] }
 	| Accepting a -> { output = []; input = effect' }
 	  
-  let check_pair { input = input1; output = output1 } { input = input2; output = output2 } =
-    let { input = input'; output = output' } = check_effects output1 input2 null_effect 
+  let check_pair signatures { input = input1; output = output1 } { input = input2; output = output2 } =
+    let { input = input'; output = output' } = check_effects signatures output1 input2 null_effect 
     in
       { input = input1 @ input'; output = output2 @ output'  }
 
@@ -144,12 +144,12 @@ type stack_effect =
       | PushFloat _ -> { input = []; output = [float_type] }
       | Call name -> List.assoc name dict
     in
+    let signatures = List.map of_opcode opcodes in
     let rec loop previous = function
-      | current :: rest -> loop (check_pair previous current) rest
+      | current :: rest -> loop (check_pair signatures previous current) rest
       | [] -> previous
     in
-    let effects' = List.map of_opcode opcodes in
-      match effects' with
+      match signatures with
 	| current :: rest -> loop current rest
 	| [] -> void_signature
 
