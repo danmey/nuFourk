@@ -475,6 +475,8 @@ end = struct
 	def_bin_op "f*" float_type **> app2f ( *. );
 	def "swap" (tsig [U.Var "a"; U.Var "b"] [U.Var "b"; U.Var "a"]) 
 	  (fun () -> let a, b = pop_value(), pop_value() in push_value b; push_value a);
+	def "dup" (tsig [U.Var "a"] [U.Var "a"; U.Var "a"]) 
+	  (fun () -> let a = pop_value() in push_value a; push_value a);
 
 	def "rot" (tsig [U.Var "f"; U.Var "g";U.Var "h"] [U.Var "h";U.Var "g"; U.Var "f"]) 
 	  (fun () -> let a, b, c = pop_value(), pop_value(), pop_value() 
@@ -507,6 +509,8 @@ end = struct
 	      (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code) 
 	       else
 		  (fun l -> append_opcode **> Code.PushCode l)) **> List.rev code);
+
+	
 	
 (*
       def ".."  { Types.arguments = st ["code"]; Types.return = [] }   **> (fun model ->
@@ -538,8 +542,23 @@ end = struct
 		Run.execute_code b1
 	      else 
 		Run.execute_code b2);
-      def "loop" (tsig [closure_type "c" "d";closure_type "a" "e"; closure_type "b" "e" ;] [U.Var "e"])
-	(fun () -> ());
+
+      def "loop" (tsig [closure_type "c" "c"; closure_type "b" "e" ;] [U.Var "c"])
+	(fun () ->
+	  let cond_code = pop_code () in
+	  let body = pop_code() in
+	  let rec loop () =
+	    Run.execute_code cond_code;
+	    let cond = pop_bool () in
+	      if cond then 
+		begin
+		  Run.execute_code body;
+		  loop()
+		end 
+	      else
+		  () 
+	  in
+	    loop ());
 	  
       def "b." (tsig [bool_type] [])
        (with_flush

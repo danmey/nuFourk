@@ -53,8 +53,8 @@ let closure_type {
 } =
   U.Term ( "closure",
 	   [
-	     U.Term ( "input", input );
-	     U.Term ( "output", output )
+	     U.Term ( "list", input );
+	     U.Term ( "list", output )
 	   ])
 
 exception Type_error of string
@@ -151,7 +151,7 @@ type stack_effect =
     (* Cheating, dirty hack! *)
     let sanitase = List.map 
 	(function
-	  | { output = [U.Term ("output", x)];
+	  | { output = [U.Term ("list", x)];
 	      input = inp } -> { output = x; input = inp} 
 	  | x -> x
 	) in
