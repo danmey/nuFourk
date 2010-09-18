@@ -142,7 +142,7 @@ type stack_effect =
 	| Leaving a -> signatures', { output = effect'; input = [] }
 	| Accepting a -> signatures', { output = []; input = effect' }
 	  
-  let check_pair i signatures { input = input1; output = output1 } { input = input2; output = output2 } =
+  let check_pair signatures { input = input1; output = output1 } { input = input2; output = output2 } =
     let signatures', { input = input'; output = output' } = check_effects signatures output1 input2 null_effect 
     in
       signatures', { input = input1 @ input'; output = output2 @ output'  }
@@ -212,22 +212,25 @@ type stack_effect =
     in
     let signatures = rename 0 **> sanitase **> to_signatures opcodes in
 
-    let rec loop i signatures previous = function
+    let rec loop signatures previous = function
       | current :: rest -> 
-	let signatures', out_signature = check_pair i signatures previous current in
-	  loop (i+1) signatures' (sanitase1 out_signature) rest
+	let signatures', out_signature = check_pair signatures previous current in
+	  loop signatures' (sanitase1 out_signature) rest
       | [] -> signatures, previous
     in
-
-     let signatures', sign = 
-       match signatures with
-	| current :: rest -> loop 0 signatures current rest
+      
+    let rec type_loop signatures =
+      let signatures', sign = 
+	match signatures with
+	| current :: rest -> loop signatures current rest
  	| [] -> [], void_signature
-     in
-      match signatures' with
-	| current :: rest -> loop 0 signatures' current rest
-	| [] -> [], void_signature
-
+      in
+	if signatures = signatures' then
+	  signatures', sign
+	else
+	  type_loop signatures' 
+    in
+      type_loop signatures
 (*
     | App ->
       match output with

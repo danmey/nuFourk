@@ -6,4 +6,8 @@
 
 [ "Number: " show . \n ] : number
 [ 0 [ dup number 1 + dup ] [ 10 < ] loop ] $
-; [ "" [ dup key dup rot swap append ] [ dup 20 = ~ ] loop ] : token
+;[ "" 
+; [ "" dup key  ] check
+
+; [ 20 = ~ ] loop ] : token
+[ "" [ dup key dup rot append swap ] [ dup 20 = ~ ] loop ] : token
