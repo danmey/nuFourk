@@ -36,6 +36,7 @@ module Value = struct
 
     | Float of float
     | Bool of bool
+    | String of string
     | Empty
     | Code of Code.opcode list
 
@@ -44,6 +45,7 @@ module Value = struct
       | Int   _ -> "int"
       | Float _ -> "float"
       | Bool _ -> "bool"
+      | String _ -> "string"
       | Empty   -> "empty"
       | Code  _ -> "code"
 end
@@ -225,7 +227,9 @@ module rec Model : sig
   val pop_float      : unit -> float
   val push_code      : Code.opcode list -> unit
   val push_bool      : bool -> unit
+  val push_string      : string -> unit
   val pop_bool      : unit -> bool
+  val pop_string      : unit -> string
   val pop_code       : unit -> Code.opcode list
   val pop_value      : unit -> Value.t
   val add_word       : Word.t -> unit
@@ -269,6 +273,7 @@ end = struct
 
   let push_float f = push (Value.Float f) model.stack
   let push_bool v = push (Value.Bool v) model.stack
+  let push_string v = push (Value.String v) model.stack
   let push_value v = push v model.stack
   let push_code f = push (Value.Code f) model.stack
 
@@ -294,6 +299,14 @@ end = struct
       match pop model.stack with
 	| Value.Bool i -> i
 	| a -> raise (Error.Runtime_Type("Expected type `bool' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+
+  let pop_string () =
+    try
+      match pop model.stack with
+	| Value.String i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `string' value given is of type is `" ^ Value.to_string a ^ "'!"))
     with
 	Empty -> raise Error.Stack_Underflow
 
@@ -340,6 +353,7 @@ end = struct
       (function
 	| Code.PushInt v   -> Model.push_int v
 	| Code.PushFloat v -> Model.push_float v
+	| Code.PushString v -> Model.push_string v
 	| Code.PushCode v  -> Model.push_code v
 	| Code.App         -> let code = Model.pop_code() in execute_code code
 	| Code.Call w      -> execute_symbol w) value
@@ -359,12 +373,14 @@ end = struct
 	      (match token with
 		| Token.Integer value -> Model.push_int value;()
 		| Token.Float value -> Model.push_float value;()
+		| Token.String value -> Model.push_string value;()
 		| Token.Word "$" -> let code = Model.pop_code() in execute_code code
 		| Token.Word name -> execute_symbol name)
 	    | Model.Compiling ->
 	      (match token with
 		| Token.Integer v -> Model.append_opcode **> Code.PushInt v
 		| Token.Float v -> Model.append_opcode **> Code.PushFloat v
+		| Token.String v -> Model.append_opcode **> Code.PushString v
 		| Token.Word "$" -> Model.append_opcode **> Code.App
 		| Token.Word name ->
 		  let w = Model.lookup_symbol name in
@@ -475,7 +491,7 @@ end = struct
 	
 	def "false" (tsig [] [bool_type]) (fun () -> push_bool false);
 	def "true" (tsig [] [bool_type]) (fun () -> push_bool true);
-
+	def "show" (tsig [string_type] []) (with_flush (fun () -> let str = pop_string () in print_string str));
 	def "." ( tsig [ int_type ] [ ] ) **>
 	  with_flush (fun () ->
 	    let v = Model.pop_int () in
@@ -504,9 +520,11 @@ end = struct
 	  let _,signature = Type.signature_of_code (Model.get_dict ()) code in
 	    add_word **> Word.def_user name code signature;
 	);
+
       def_bin_op_ret "<" int_type bool_type (fun () -> 
 	let i1, i2 = pop_int(), pop_int() in 
 	  push_bool (i1 < i2));
+
       def "?" (tsig [closure_type "c" "d";closure_type "a" "e"; closure_type "b" "e" ;] [U.Var "e"])
 	(fun () ->
 	  let cond_code = pop_code () in
@@ -518,7 +536,9 @@ end = struct
 		Run.execute_code b1
 	      else 
 		Run.execute_code b2);
-
+      def "loop" (tsig [closure_type "c" "d";closure_type "a" "e"; closure_type "b" "e" ;] [U.Var "e"])
+	(fun () -> ());
+	  
       def "b." (tsig [bool_type] [])
        (with_flush
 	(fun () ->

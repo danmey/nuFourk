@@ -31,12 +31,15 @@ let word = [^' ''\t''\n']+
 let float_num = ['-''+']?['0'-'9']+'.'['0'-'9']*(['e''E']['-''+']?['0'-'9']+)?
 let int_num = ['-''+']?['0'-'9']+
 let whites = [' ''\t''\n']+
-let comments = ';' [^'\n']* '\n'
+let comment = ';' [^'\n']* '\n'
+let string = '"' ([^'"']*) '"'
+
 
 rule next_token =
 
   parse
-    | comments        { next_token lexbuf }
+    | comment         { next_token lexbuf }
+    | string as t     { Token.String (String.sub t 1 ((String.length t) - 2)) }
     | whites          { next_token lexbuf }
     | float_num as t  { Token.Float (float_of_string t)}
     | int_num as t    { Token.Integer (int_of_string t) }

@@ -22,6 +22,7 @@ type opcode =
   | PushInt of int 
   | PushFloat of float 
   | PushBool of bool
+  | PushString of string
   | Call of string 
   | PushCode of code
   | App
