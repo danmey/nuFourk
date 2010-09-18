@@ -35,6 +35,7 @@ module Value = struct
     | Int of int
 
     | Float of float
+    | Bool of bool
     | Empty
     | Code of Code.opcode list
 
@@ -42,6 +43,7 @@ module Value = struct
     function
       | Int   _ -> "int"
       | Float _ -> "float"
+      | Bool _ -> "bool"
       | Empty   -> "empty"
       | Code  _ -> "code"
 end
@@ -222,6 +224,7 @@ module rec Model : sig
   val push_value     : Value.t -> unit
   val pop_float      : unit -> float
   val push_code      : Code.opcode list -> unit
+  val push_bool      : bool -> unit
   val pop_code       : unit -> Code.opcode list
   val pop_value      : unit -> Value.t
   val add_word       : Word.t -> unit
@@ -264,6 +267,7 @@ end = struct
 	Empty -> raise Error.Stack_Underflow
 
   let push_float f = push (Value.Float f) model.stack
+  let push_bool v = push (Value.Bool v) model.stack
   let push_value v = push v model.stack
   let push_code f = push (Value.Code f) model.stack
 
@@ -280,6 +284,14 @@ end = struct
     try
       match pop model.stack with
 	| Value.Float i -> i
+	| a -> raise (Error.Runtime_Type("Expected type `float' value given is of type is `" ^ Value.to_string a ^ "'!"))
+    with
+	Empty -> raise Error.Stack_Underflow
+
+  let pop_bool () =
+    try
+      match pop model.stack with
+	| Value.Bool i -> i
 	| a -> raise (Error.Runtime_Type("Expected type `float' value given is of type is `" ^ Value.to_string a ^ "'!"))
     with
 	Empty -> raise Error.Stack_Underflow
@@ -452,7 +464,9 @@ end = struct
 	def "i->f" (tsig [int_type] [float_type]) (fun () -> ());
 	def "f->i" (tsig [float_type] [int_type]) (fun () -> ());
 	def "f->if" (tsig [float_type] [int_type;float_type]) (fun () -> ());
-
+	
+	def "false" (tsig [] [bool_type]) (fun () -> push_bool false);
+	def "true" (tsig [] [bool_type]) (fun () -> push_bool true);
 
 	def "." ( tsig [ int_type ] [ ] ) **>
 	  with_flush (fun () ->
@@ -482,7 +496,8 @@ end = struct
 	  let _,signature = Type.signature_of_code (Model.get_dict ()) code in
 	    add_word **> Word.def_user name code signature;
 	);
-
+      
+      (* def "?" (tsig [ U.Term ("code", [U.Var "a"; U.Var "b"] *)
 (*
       def "!"  (tsig [U.Var "a"] [U.Var "b"] ) **> lift1c **>
 	(fun code ->

@@ -43,6 +43,8 @@ let int_type = basic_type "int"
 
 let float_type = basic_type "float"
 
+let bool_type = basic_type "bool"
+
 let closure_type {
   input = input;
   output = output;
@@ -154,6 +156,7 @@ type stack_effect =
 		    input = _} -> loop ({ input = inp; output = out } :: acc) xs))
       | PushInt _ :: xs -> loop ({ input = []; output = [int_type] }::acc) xs 
       | PushFloat _ ::xs -> loop ({ input = []; output = [float_type] }::acc) xs 
+      | PushBool _ ::xs -> loop ({ input = []; output = [bool_type] }::acc) xs 
       | PushCode code::xs -> 
 	let signature = snd(signature_of_code dict code) in
 	  loop ({ input = []; output = [U.Term ("code", [U.Term ("input", signature.input); U.Term ("output", signature.output)])] }::acc) xs

@@ -21,6 +21,7 @@ open BatPervasives
 type opcode = 
   | PushInt of int 
   | PushFloat of float 
+  | PushBool of bool
   | Call of string 
   | PushCode of code
   | App
