@@ -488,7 +488,7 @@ end = struct
 
       def "check" (tsig [U.Term ("code", [U.Var "a";U.Var "b"])] []) **> lift1c **>
 	(fun code ->
-	  print_endline **> Type.signature_to_string **> Type.signature_of_code (Model.get_core_dict ()) code;
+	  print_endline **> Type.signature_to_string **> snd (Type.signature_of_code (Model.get_core_dict ()) code);
 	  flush stdout;
 	);
 
@@ -516,7 +516,7 @@ end = struct
 	  let word2 = lookup_symbol name2 in
 	  let signature1 = match word1.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
 	  let signature2 = match word2.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
-	    print_endline **> signature_to_string (Type.check_pair [] signature1 signature2)
+	    print_endline **> signature_to_string (snd (Type.check_pair [] signature1 signature2))
 	);
       ] |> List.iter add_word;
 

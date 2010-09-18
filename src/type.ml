@@ -107,14 +107,18 @@ type stack_effect =
   let null_effect = Accepting []
 
   let rec check_effects signatures l r effect =
-    let rec unify_types combined effect =
+    let rec unify_types signatures combined effect =
       let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined in
+      let subst_sig ({ input = input; output = output }) =
+	{ input = U.apply_all subst input; output = U.apply_all subst output }
+      in
+      let signatures' = List.map subst_sig signatures in
 	match subst with
-	  | [] -> effect, combined
+	  | [] -> signatures', effect, combined
 	  | _ -> 
 	    let o, i = List.split combined in
 	    let o', i', effect' = U.apply_all subst o, U.apply_all subst i, U.apply_all subst effect in
-	      unify_types (List.combine o' i') effect'
+	      unify_types signatures' (List.combine o' i') effect'
     in
 
     let rec combine a b =
@@ -127,16 +131,16 @@ type stack_effect =
 
     let effect, combined = combine l r in
     let e = match effect with Leaving a -> a | Accepting a -> a in
-    let effect', combined' = unify_types combined e in
+    let signatures', effect', combined' = unify_types signatures combined e in
     let o, i = List.split combined' in
       match effect with
-	| Leaving a -> { output = effect'; input = [] }
-	| Accepting a -> { output = []; input = effect' }
+	| Leaving a -> signatures', { output = effect'; input = [] }
+	| Accepting a -> signatures', { output = []; input = effect' }
 	  
   let check_pair signatures { input = input1; output = output1 } { input = input2; output = output2 } =
-    let { input = input'; output = output' } = check_effects signatures output1 input2 null_effect 
+    let signatures', { input = input'; output = output' } = check_effects signatures output1 input2 null_effect 
     in
-      { input = input1 @ input'; output = output2 @ output'  }
+      signatures', { input = input1 @ input'; output = output2 @ output'  }
 
   let signature_of_code dict opcodes =
     let of_opcode = function
@@ -144,14 +148,24 @@ type stack_effect =
       | PushFloat _ -> { input = []; output = [float_type] }
       | Call name -> List.assoc name dict
     in
+
     let signatures = List.map of_opcode opcodes in
-    let rec loop previous = function
-      | current :: rest -> loop (check_pair signatures previous current) rest
-      | [] -> previous
+
+    let rec loop signatures previous = function
+      | current :: rest -> 
+	let signatures', out_signature = check_pair signatures previous current in
+	  loop signatures' out_signature rest
+      | [] -> signatures, previous
     in
+
+    let signatures', sign = 
       match signatures with
-	| current :: rest -> loop current rest
-	| [] -> void_signature
+	| current :: rest -> loop signatures current rest
+	| [] -> [], void_signature
+    in
+      match signatures' with
+	| current :: rest -> loop signatures' current rest
+	| [] -> [], void_signature
 
 (*
     | App ->
