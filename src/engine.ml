@@ -460,7 +460,7 @@ end = struct
     let def name signature body = Word.def name Word.Compiled signature body in
     let closure_type a b = U.Term ("code", [U.Var a; U.Var b]) in
      let closure_type2 a b = U.Term ("code", [U.Var a; U.Var b]) in
-    (* let closure_type2 a b = U.Term ("code", [U.Var a; U.Term ("output", [U.Var b])]) in *)
+    (* let closure_type2 a b = U.Term ("code", [U.Var a; U.Term ("list", [U.Var b])]) in *)
     let def_bin_op name typ body = def name (sig_bin_op typ) body in
     let def_bin_op_ret name typ ret body = def name (tsig [ typ; typ ] [ ret ]) body in
       [
@@ -478,7 +478,7 @@ end = struct
 	def "dup" (tsig [U.Var "a"] [U.Var "a"; U.Var "a"]) 
 	  (fun () -> let a = pop_value() in push_value a; push_value a);
 
-	def "rot" (tsig [U.Var "f"; U.Var "g";U.Var "h"] [U.Var "h";U.Var "g"; U.Var "f"]) 
+	def "rot" (tsig [U.Var "a"; U.Var "b";U.Var "c"] [U.Var "b";U.Var "c"; U.Var "a"]) 
 	  (fun () -> let a, b, c = pop_value(), pop_value(), pop_value() 
 		     in push_value b; push_value c; push_value a);
 
@@ -543,18 +543,16 @@ end = struct
 	      else 
 		Run.execute_code b2);
 
-      def "loop" (tsig [closure_type "c" "c"; closure_type "b" "e" ;] [U.Var "c"])
+      def "loop" (tsig [closure_type "b" "e"; closure_type2 "d" "c" ;] [U.Var "c"])
 	(fun () ->
 	  let cond_code = pop_code () in
 	  let body = pop_code() in
 	  let rec loop () =
+	    Run.execute_code body;
 	    Run.execute_code cond_code;
 	    let cond = pop_bool () in
 	      if cond then 
-		begin
-		  Run.execute_code body;
 		  loop()
-		end 
 	      else
 		  () 
 	  in
@@ -582,7 +580,7 @@ end = struct
 	  print_endline **> Type.signature_to_string **> snd (Type.signature_of_code (Model.get_dict ()) code);
 	  flush stdout;
 	);
-
+      
       def "drop" ( tsig [ U.Var ( "a" ) ] [ ] ) **> (fun () -> ignore( Model.pop_value()));
       def "type" void_signature **> (fun () ->
 	  let name = match Lexer.next_token Model.model.Model.lexbuf with
@@ -593,6 +591,22 @@ end = struct
 	  let signature = match word.Word.code with | Word.Core (_, s) -> s | Word.User (_, s) -> s in
 	  let s = Type.signature_to_string signature in
 	    print_endline s);
+      
+      def_bin_op_ret "=" int_type bool_type (fun () -> 
+	let i1, i2 = pop_int(), pop_int() in 
+	  push_bool (i1 = i2));
+
+      def "key" (tsig [] [int_type]) **> 
+	(fun () ->
+	  let c = int_of_char (input_char stdin) in
+	    push_int c);
+
+      def "append" (tsig [int_type; string_type] [string_type]) **> 
+	(fun () ->
+	  let c = char_of_int (pop_int()) in
+	  let str = pop_string() in
+	  let tmp = String.make 1 c in
+	    push_string (String.concat "" [str;tmp]));
 
 	def "type2" void_signature **> with_flush (fun () ->
 	  let name1 = match Lexer.next_token Model.model.Model.lexbuf with
@@ -607,7 +621,7 @@ end = struct
 	  let word2 = lookup_symbol name2 in
 	  let signature1 = match word1.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
 	  let signature2 = match word2.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
-	    print_endline **> signature_to_string (snd (Type.check_pair [] signature1 signature2))
+	    print_endline **> signature_to_string (snd (Type.check_pair 0 [] signature1 signature2))
 	);
       ] |> List.iter add_word;
 

@@ -49,6 +49,10 @@ let compose s2 s1 =
 
 exception Unify_fail of string * string
 
+let rec rename i = function
+  | Var n' -> Var (Printf.sprintf "%s%d" n' i) 
+  | Term (n,l) -> Term (n, List.map (rename i) l)
+
 let rec unify = function
   | Var(n), t -> 
       if Var(n) = t then [] else

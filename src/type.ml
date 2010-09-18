@@ -142,7 +142,7 @@ type stack_effect =
 	| Leaving a -> signatures', { output = effect'; input = [] }
 	| Accepting a -> signatures', { output = []; input = effect' }
 	  
-  let check_pair signatures { input = input1; output = output1 } { input = input2; output = output2 } =
+  let check_pair i signatures { input = input1; output = output1 } { input = input2; output = output2 } =
     let signatures', { input = input'; output = output' } = check_effects signatures output1 input2 null_effect 
     in
       signatures', { input = input1 @ input'; output = output2 @ output'  }
@@ -157,7 +157,7 @@ type stack_effect =
 	) in
 
     let sanitase1 = (function
-	  | { output = [U.Term ("output", x)];
+	  | { output = [U.Term ("list", x)];
 	      input = inp } -> { output = x; input = inp} 
 	  | x -> x
 	) in
@@ -167,11 +167,11 @@ type stack_effect =
 	let out = match lst with
 	| App::xs -> (match acc with
 	    | [] ->  { 
-	      input = [U.Term ("code", [U.Term ("input", [U.Var "a"]); U.Term ("output", [U.Var "b"])])];
+	      input = [U.Term ("code", [U.Term ("list", [U.Var "a"]); U.Term ("list", [U.Var "b"])])];
 	      output = [U.Var "b"]} :: acc
 	    | s::acc ->
 	      (match s with
-		  { output = [U.Term ("code", [U.Term ("input", inp); U.Term ("output", out)])];
+		  { output = [U.Term ("code", [U.Term ("list", inp); U.Term ("list", out)])];
 		    input = _} -> loop ({ input = inp; output = out } :: acc) xs))
       | PushInt _ :: xs -> loop ({ input = []; output = [int_type] }::acc) xs 
       | PushFloat _ ::xs -> loop ({ input = []; output = [float_type] }::acc) xs 
@@ -179,7 +179,7 @@ type stack_effect =
       | PushString _ ::xs -> loop ({ input = []; output = [string_type] }::acc) xs 
       | PushCode code::xs ->
 	let signature = snd(signature_of_code dict code) in
-	  loop ({ input = []; output = [U.Term ("code", [U.Term ("input", signature.input); U.Term ("output", signature.output)])] }::acc) xs
+	  loop ({ input = []; output = [U.Term ("code", [U.Term ("list", signature.input); U.Term ("list", signature.output)])] }::acc) xs
       | Call name::xs -> loop ((List.assoc name dict)::acc) xs 
       | [] -> acc
 	in
@@ -194,33 +194,38 @@ type stack_effect =
       | PushFloat _ -> [{ input = []; output = [float_type] }], acc@[{ input = []; output = [float_type] }]
       | PushCode code -> 
 	let signature = snd(signature_of_code dict code) in
-	  , acc @ [{ input = []; output = [U.Term ("code", [U.Term ("input", signature.input); U.Term ("output", signature.output)])] }]
+	  , acc @ [{ input = []; output = [U.Term ("code", [U.Term ("list", signature.input); U.Term ("list", signature.output)])] }]
       | Call name -> el, acc @ [List.assoc name dict]
       | App -> print_endline (signature_to_string prev); { input = []; output = [] };
 	(match prev with
 	  | {
-	    output = [U.Term ("code", [U.Term ("input", inp);a])];
+	    output = [U.Term ("code", [U.Term ("list", inp);a])];
 	    input = _
 	  } -> el, List.rev ({ input = []; output = inp }:: List.rev (List.tl acc)))
     in
 *)
     
-    let signatures = sanitase **> to_signatures opcodes in
+    let rec rename i = function
+      | x :: xs -> { input = List.map (U.rename i) x.input;
+		     output = List.map (U.rename i) x.output;} :: rename (i+1) xs
+      | [] -> []
+    in
+    let signatures = rename 0 **> sanitase **> to_signatures opcodes in
 
-    let rec loop signatures previous = function
+    let rec loop i signatures previous = function
       | current :: rest -> 
-	let signatures', out_signature = check_pair signatures previous current in
-	  loop signatures' (sanitase1 out_signature) rest
+	let signatures', out_signature = check_pair i signatures previous current in
+	  loop (i+1) signatures' (sanitase1 out_signature) rest
       | [] -> signatures, previous
     in
 
      let signatures', sign = 
        match signatures with
-	| current :: rest -> loop signatures current rest
+	| current :: rest -> loop 0 signatures current rest
  	| [] -> [], void_signature
      in
       match signatures' with
-	| current :: rest -> loop signatures' current rest
+	| current :: rest -> loop 0 signatures' current rest
 	| [] -> [], void_signature
 
 (*
@@ -231,8 +236,8 @@ type stack_effect =
 	    let check
 	    match func with
 	      | U.Term ( "closure",
-			 U.Term ( "input", input' ),
-			 U.Term ( "output", output' ) ) ->
+			 U.Term ( "list", input' ),
+			 U.Term ( "list", output' ) ) ->
 		if output <> output' then type_error output output'
 		else { current with output = output  input }
 *)
@@ -249,6 +254,6 @@ and type_to_string
 
     function
     | U.Term ( "closure",
-	       U.Term ( "input", input ),
-	       U.Term ( "output", output ) ) -> Printf.printf "closure of type ( %s )" (type_of_string
+	       U.Term ( "list", input ),
+	       U.Term ( "list", output ) ) -> Printf.printf "closure of type ( %s )" (type_of_string
 *)
