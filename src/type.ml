@@ -148,9 +148,23 @@ type stack_effect =
       signatures', { input = input1 @ input'; output = output2 @ output'  }
 
   let rec signature_of_code dict opcodes =
+    (* Cheating, dirty hack! *)
+    let sanitase = List.map 
+	(function
+	  | { output = [U.Term ("output", x)];
+	      input = inp } -> { output = x; input = inp} 
+	  | x -> x
+	) in
+
+    let sanitase1 = (function
+	  | { output = [U.Term ("output", x)];
+	      input = inp } -> { output = x; input = inp} 
+	  | x -> x
+	) in
     
     let to_signatures lst = 
-      let rec loop acc = function
+      let rec loop acc lst =
+	let out = match lst with
 	| App::xs -> (match acc with
 	    | [] ->  { 
 	      input = [U.Term ("code", [U.Term ("input", [U.Var "a"]); U.Term ("output", [U.Var "b"])])];
@@ -163,11 +177,13 @@ type stack_effect =
       | PushFloat _ ::xs -> loop ({ input = []; output = [float_type] }::acc) xs 
       | PushBool _ ::xs -> loop ({ input = []; output = [bool_type] }::acc) xs 
       | PushString _ ::xs -> loop ({ input = []; output = [string_type] }::acc) xs 
-      | PushCode code::xs -> 
+      | PushCode code::xs ->
 	let signature = snd(signature_of_code dict code) in
 	  loop ({ input = []; output = [U.Term ("code", [U.Term ("input", signature.input); U.Term ("output", signature.output)])] }::acc) xs
       | Call name::xs -> loop ((List.assoc name dict)::acc) xs 
       | [] -> acc
+	in
+	  sanitase out
       in
 	List.rev (loop [] lst) in
 (*		
@@ -188,20 +204,21 @@ type stack_effect =
 	  } -> el, List.rev ({ input = []; output = inp }:: List.rev (List.tl acc)))
     in
 *)
-    let signatures = to_signatures opcodes in
+    
+    let signatures = sanitase **> to_signatures opcodes in
 
     let rec loop signatures previous = function
       | current :: rest -> 
 	let signatures', out_signature = check_pair signatures previous current in
-	  loop signatures' out_signature rest
+	  loop signatures' (sanitase1 out_signature) rest
       | [] -> signatures, previous
     in
 
-    let signatures', sign = 
-      match signatures with
+     let signatures', sign = 
+       match signatures with
 	| current :: rest -> loop signatures current rest
-	| [] -> [], void_signature
-    in
+ 	| [] -> [], void_signature
+     in
       match signatures' with
 	| current :: rest -> loop signatures' current rest
 	| [] -> [], void_signature

@@ -459,6 +459,8 @@ end = struct
     let macro name signature body = Word.def name Word.Macro signature body in
     let def name signature body = Word.def name Word.Compiled signature body in
     let closure_type a b = U.Term ("code", [U.Var a; U.Var b]) in
+     let closure_type2 a b = U.Term ("code", [U.Var a; U.Var b]) in
+    (* let closure_type2 a b = U.Term ("code", [U.Var a; U.Term ("output", [U.Var b])]) in *)
     let def_bin_op name typ body = def name (sig_bin_op typ) body in
     let def_bin_op_ret name typ ret body = def name (tsig [ typ; typ ] [ ret ]) body in
       [
@@ -525,7 +527,7 @@ end = struct
 	let i1, i2 = pop_int(), pop_int() in 
 	  push_bool (i1 < i2));
 
-      def "?" (tsig [closure_type "c" "d";closure_type "a" "e"; closure_type "b" "e" ;] [U.Var "e"])
+      def "?" (tsig [closure_type "c" "d";closure_type2 "a" "e"; closure_type2 "b" "e" ;] [U.Var "e"])
 	(fun () ->
 	  let cond_code = pop_code () in
 	  let b1 = pop_code() in
