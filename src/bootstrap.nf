@@ -1,0 +1,3 @@
+; Define `not'
+[ [ true ] [ false ] [ ] ? ] : ~
+
