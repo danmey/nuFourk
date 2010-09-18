@@ -150,6 +150,9 @@ type stack_effect =
     let to_signatures lst = 
       let rec loop acc = function
 	| App::xs -> (match acc with
+	    | [] ->  { 
+	      input = [U.Term ("code", [U.Term ("input", [U.Var "a"]); U.Term ("output", [U.Var "b"])])];
+	      output = [U.Var "b"]} :: acc
 	    | s::acc ->
 	      (match s with
 		  { output = [U.Term ("code", [U.Term ("input", inp); U.Term ("output", out)])];
@@ -163,7 +166,6 @@ type stack_effect =
       | Call name::xs -> loop ((List.assoc name dict)::acc) xs 
       | [] -> acc
       in
-	
 	List.rev (loop [] lst) in
 (*		
 

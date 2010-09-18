@@ -444,6 +444,7 @@ end = struct
     let def name signature body = Word.def name Word.Compiled signature body in
     let closure_type a b = U.Term ("code", [U.Var a; U.Var b]) in
     let def_bin_op name typ body = def name (sig_bin_op typ) body in
+    let def_bin_op_ret name typ ret body = def name (tsig [ typ; typ ] [ ret ]) body in
       [
 	def_bin_op "+" int_type **> app2i ( + );
 	def_bin_op "-" int_type **> app2i ( - );
@@ -456,6 +457,11 @@ end = struct
 	def_bin_op "f*" float_type **> app2f ( *. );
 	def "swap" (tsig [U.Var "a"; U.Var "b"] [U.Var "b"; U.Var "a"]) 
 	  (fun () -> let a, b = pop_value(), pop_value() in push_value b; push_value a);
+
+	def "rot" (tsig [U.Var "f"; U.Var "g";U.Var "h"] [U.Var "h";U.Var "g"; U.Var "f"]) 
+	  (fun () -> let a, b, c = pop_value(), pop_value(), pop_value() 
+		     in push_value b; push_value c; push_value a);
+
 	def "i" (tsig [] [int_type]) (fun () -> push_int 1);
 	def "f" (tsig [] [float_type]) (fun () -> push_float 1.);
 
@@ -498,18 +504,21 @@ end = struct
 	  let _,signature = Type.signature_of_code (Model.get_dict ()) code in
 	    add_word **> Word.def_user name code signature;
 	);
-      
+      def_bin_op_ret "<" int_type bool_type (fun () -> 
+	let i1, i2 = pop_int(), pop_int() in 
+	  push_bool (i1 < i2));
       def "?" (tsig [closure_type "c" "d";closure_type "a" "e"; closure_type "b" "e" ;] [U.Var "e"])
 	(fun () ->
 	  let cond_code = pop_code () in
+	  let b1 = pop_code() in
+	  let b2 = pop_code() in
 	    Run.execute_code cond_code;
 	    let cond = pop_bool () in
-	    let b1 = pop_code() in
-	    let b2 = pop_code() in
 	      if cond then 
 		Run.execute_code b1
 	      else 
 		Run.execute_code b2);
+
       def "b." (tsig [bool_type] [])
        (with_flush
 	(fun () ->
@@ -540,7 +549,7 @@ end = struct
 	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'") 
 	  in
 	  let word = lookup_symbol name in
-	  let signature = match word.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in
+	  let signature = match word.Word.code with | Word.Core (_, s) -> s | Word.User (_, s) -> s in
 	  let s = Type.signature_to_string signature in
 	    print_endline s);
 
