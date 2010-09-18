@@ -57,7 +57,7 @@ module Word = struct
 
     type code =
       | Core of (unit -> unit) * Type.signature
-      | User of Code.opcode list
+      | User of Code.opcode list * Type.signature
 
     type t = {
       name : string;
@@ -70,14 +70,14 @@ module Word = struct
       code = Core (code,s);
       kind = kind }
 
-    let def_user name code = {
+    let def_user name code signature = {
 	name = name;
-	code = User code;
+	code = User (code, signature);
 	kind = Compiled }
 
     let empty name = {
       name = name;
-      code = User [];
+      code = User ([], Type.void_signature);
       kind = Compiled }
 end
 
@@ -225,7 +225,7 @@ module rec Model : sig
   val pop_code       : unit -> Code.opcode list
   val pop_value      : unit -> Value.t
   val add_word       : Word.t -> unit
-  val get_core_dict  : unit -> Type.dictionary
+  val get_dict  : unit -> Type.dictionary
   val lookup_symbol  : string -> Word.t
   val append_opcode  : Code.opcode -> unit
 
@@ -298,11 +298,11 @@ end = struct
     in
       l := token::!l
 
-  let get_core_dict () =
+  let get_dict () =
     Hashtbl.fold (fun name word acc ->
       match word.Word.code with
 	| Word.Core (_, signature) -> (name, signature) :: acc
-	| _ -> acc) model.dict []
+	| Word.User (_, signature) -> (name, signature) :: acc) model.dict []
 
 end
 and Run : sig
@@ -320,14 +320,15 @@ end = struct
   let rec execute_word model word =
     match word.Word.code with
       | Word.Core (f,_) -> f()
-      | Word.User code -> execute_code code
+      | Word.User (code,_) -> execute_code code
 
   and execute_code value =
     List.iter
       (function
 	| Code.PushInt v   -> Model.push_int v
 	| Code.PushFloat v -> Model.push_float v
-	| Code.PushCode v  -> execute_code v
+	| Code.PushCode v  -> Model.push_code v
+	| Code.App         -> let code = Model.pop_code() in execute_code code
 	| Code.Call w      -> execute_symbol w) value
 
   and execute_symbol symbol =
@@ -345,6 +346,7 @@ end = struct
 	      (match token with
 		| Token.Integer value -> Model.push_int value;()
 		| Token.Float value -> Model.push_float value;()
+		| Token.Word "!" -> let code = Model.pop_code() in execute_code code
 		| Token.Word name -> execute_symbol name)
 	    | Model.Compiling ->
 	      (match token with
@@ -461,8 +463,9 @@ end = struct
 	macro "]" (tsig [] [ U.Term ("code", [U.Var "a"; U.Var "b"]) ]) **> 
 	  (fun () -> 
 	    let code = !(Stack.pop model.codebuf) in
-	      (*	  Type.signature_of_code model **> List.rev **> code; *)
-	      (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code) else
+	    let _, signature = Type.signature_of_code (Model.get_dict()) **> List.rev **> code in
+	      (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code) 
+	       else
 		  (fun l -> append_opcode **> Code.PushCode l)) **> List.rev code);
 	
 (*
@@ -471,26 +474,28 @@ end = struct
 	List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model;
 	print_string "]";
 	flush stdout);
-      macro ":"  { Types.arguments = []; Types.return = [] } **>
+*)
+      macro ":"  void_signature **>
 	tok1 **>
 	(fun model name ->
 	  let code = pop_code model in
-	  Types.signature_of_code model code;
-	  Dictionary.add model.dict **> Word.def_user name **> code;
+	  let _,signature = Type.signature_of_code (Model.get_dict ()) code in
+	    add_word **> Word.def_user name code signature;
 	);
-*)
-      def "!"  (tsig [U.Term ("code", [U.Var "a";U.Var "b"])] [U.Var "b"] ) **> lift1c **>
+
+(*
+      def "!"  (tsig [U.Var "a"] [U.Var "b"] ) **> lift1c **>
 	(fun code ->
 	  Run.execute_code code
 	);
-
+*)
       def "words" void_signature **> with_flush (fun () ->
-	let dict = Model.get_core_dict () in
+	let dict = Model.get_dict () in
 	  List.iter (fun (name, signature) -> Printf.printf "%s :: %s\n" name (Type.signature_to_string signature)) dict);
 
       def "check" (tsig [U.Term ("code", [U.Var "a";U.Var "b"])] []) **> lift1c **>
 	(fun code ->
-	  print_endline **> Type.signature_to_string **> snd (Type.signature_of_code (Model.get_core_dict ()) code);
+	  print_endline **> Type.signature_to_string **> snd (Type.signature_of_code (Model.get_dict ()) code);
 	  flush stdout;
 	);
 

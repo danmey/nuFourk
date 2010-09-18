@@ -115,7 +115,7 @@ type stack_effect =
       let signatures' = List.map subst_sig signatures in
 	match subst with
 	  | [] -> signatures', effect, combined
-	  | _ when signatures = signatures' -> signatures', effect, combined
+	  | _ when signatures == signatures' -> signatures', effect, combined
 	  | _ -> 
 	    let o, i = List.split combined in
 	    let o', i', effect' = U.apply_all subst o, U.apply_all subst i, U.apply_all subst effect in
@@ -143,14 +143,44 @@ type stack_effect =
     in
       signatures', { input = input1 @ input'; output = output2 @ output'  }
 
-  let signature_of_code dict opcodes =
-    let of_opcode = function
-      | PushInt _ -> { input = []; output = [int_type] }
-      | PushFloat _ -> { input = []; output = [float_type] }
-      | Call name -> List.assoc name dict
-    in
+  let rec signature_of_code dict opcodes =
+    
+    let to_signatures lst = 
+      let rec loop acc = function
+	| App::xs -> (match acc with
+	    | s::acc ->
+	      (match s with
+		  { output = [U.Term ("code", [U.Term ("input", inp); U.Term ("output", out)])];
+		    input = _} -> loop ({ input = inp; output = out } :: acc) xs))
+      | PushInt _ :: xs -> loop ({ input = []; output = [int_type] }::acc) xs 
+      | PushFloat _ ::xs -> loop ({ input = []; output = [float_type] }::acc) xs 
+      | PushCode code::xs -> 
+	let signature = snd(signature_of_code dict code) in
+	  loop ({ input = []; output = [U.Term ("code", [U.Term ("input", signature.input); U.Term ("output", signature.output)])] }::acc) xs
+      | Call name::xs -> loop ((List.assoc name dict)::acc) xs 
+      | [] -> acc
+      in
+	
+	List.rev (loop [] lst) in
+(*		
 
-    let signatures = List.map of_opcode opcodes in
+    let of_opcode (prev, acc) el =
+      match el with
+      | PushInt _ -> [{ input = []; output = [int_type] }], acc@ [{ input = []; output = [int_type] }]
+      | PushFloat _ -> [{ input = []; output = [float_type] }], acc@[{ input = []; output = [float_type] }]
+      | PushCode code -> 
+	let signature = snd(signature_of_code dict code) in
+	  , acc @ [{ input = []; output = [U.Term ("code", [U.Term ("input", signature.input); U.Term ("output", signature.output)])] }]
+      | Call name -> el, acc @ [List.assoc name dict]
+      | App -> print_endline (signature_to_string prev); { input = []; output = [] };
+	(match prev with
+	  | {
+	    output = [U.Term ("code", [U.Term ("input", inp);a])];
+	    input = _
+	  } -> el, List.rev ({ input = []; output = inp }:: List.rev (List.tl acc)))
+    in
+*)
+    let signatures = to_signatures opcodes in
 
     let rec loop signatures previous = function
       | current :: rest -> 
