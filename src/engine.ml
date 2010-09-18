@@ -359,13 +359,13 @@ end = struct
 	      (match token with
 		| Token.Integer value -> Model.push_int value;()
 		| Token.Float value -> Model.push_float value;()
-		| Token.Word "!" -> let code = Model.pop_code() in execute_code code
+		| Token.Word "$" -> let code = Model.pop_code() in execute_code code
 		| Token.Word name -> execute_symbol name)
 	    | Model.Compiling ->
 	      (match token with
 		| Token.Integer v -> Model.append_opcode **> Code.PushInt v
 		| Token.Float v -> Model.append_opcode **> Code.PushFloat v
-		| Token.Word "!" -> Model.append_opcode **> Code.App
+		| Token.Word "$" -> Model.append_opcode **> Code.App
 		| Token.Word name ->
 		  let w = Model.lookup_symbol name in
 		    (match w.Word.kind with
@@ -442,7 +442,7 @@ end = struct
     let sig_bin_op typ = tsig [ typ; typ ] [ typ ] in
     let macro name signature body = Word.def name Word.Macro signature body in
     let def name signature body = Word.def name Word.Compiled signature body in
-    let closure_type = U.Term ("code", [U.Var "a"; U.Var "b"]) in
+    let closure_type a b = U.Term ("code", [U.Var a; U.Var b]) in
     let def_bin_op name typ body = def name (sig_bin_op typ) body in
       [
 	def_bin_op "+" int_type **> app2i ( + );
@@ -499,7 +499,7 @@ end = struct
 	    add_word **> Word.def_user name code signature;
 	);
       
-      def "?" (tsig [closure_type;closure_type;closure_type;] [U.Var "b"])
+      def "?" (tsig [closure_type "c" "d";closure_type "a" "e"; closure_type "b" "e" ;] [U.Var "e"])
 	(fun () ->
 	  let cond_code = pop_code () in
 	    Run.execute_code cond_code;
