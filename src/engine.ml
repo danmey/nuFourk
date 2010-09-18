@@ -219,6 +219,7 @@ module rec Model : sig
   val push_int       : int -> unit
   val pop_int        : unit -> int
   val push_float     : float -> unit
+  val push_value     : Value.t -> unit
   val pop_float      : unit -> float
   val push_code      : Code.opcode list -> unit
   val pop_code       : unit -> Code.opcode list
@@ -263,7 +264,7 @@ end = struct
 	Empty -> raise Error.Stack_Underflow
 
   let push_float f = push (Value.Float f) model.stack
-
+  let push_value v = push v model.stack
   let push_code f = push (Value.Code f) model.stack
 
   let pop_value () = pop model.stack
@@ -437,7 +438,8 @@ end = struct
 	def_bin_op "f-" float_type **> app2f ( -. );
 	def_bin_op "f/" float_type **> app2f ( /. );
 	def_bin_op "f*" float_type **> app2f ( *. );
-	def "swap" (tsig [U.Var "a"; U.Var "b"] [U.Var "b"; U.Var "a"]) (fun () -> push_int 1);
+	def "swap" (tsig [U.Var "a"; U.Var "b"] [U.Var "b"; U.Var "a"]) 
+	  (fun () -> let a, b = pop_value(), pop_value() in push_value b; push_value a);
 	def "i" (tsig [] [int_type]) (fun () -> push_int 1);
 	def "f" (tsig [] [float_type]) (fun () -> push_float 1.);
 

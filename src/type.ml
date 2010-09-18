@@ -115,6 +115,7 @@ type stack_effect =
       let signatures' = List.map subst_sig signatures in
 	match subst with
 	  | [] -> signatures', effect, combined
+	  | _ when signatures = signatures' -> signatures', effect, combined
 	  | _ -> 
 	    let o, i = List.split combined in
 	    let o', i', effect' = U.apply_all subst o, U.apply_all subst i, U.apply_all subst effect in
