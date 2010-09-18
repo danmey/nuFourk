@@ -225,6 +225,7 @@ module rec Model : sig
   val pop_float      : unit -> float
   val push_code      : Code.opcode list -> unit
   val push_bool      : bool -> unit
+  val pop_bool      : unit -> bool
   val pop_code       : unit -> Code.opcode list
   val pop_value      : unit -> Value.t
   val add_word       : Word.t -> unit
@@ -292,7 +293,7 @@ end = struct
     try
       match pop model.stack with
 	| Value.Bool i -> i
-	| a -> raise (Error.Runtime_Type("Expected type `float' value given is of type is `" ^ Value.to_string a ^ "'!"))
+	| a -> raise (Error.Runtime_Type("Expected type `bool' value given is of type is `" ^ Value.to_string a ^ "'!"))
     with
 	Empty -> raise Error.Stack_Underflow
 
@@ -441,6 +442,7 @@ end = struct
     let sig_bin_op typ = tsig [ typ; typ ] [ typ ] in
     let macro name signature body = Word.def name Word.Macro signature body in
     let def name signature body = Word.def name Word.Compiled signature body in
+    let closure_type = U.Term ("code", [U.Var "a"; U.Var "b"]) in
     let def_bin_op name typ body = def name (sig_bin_op typ) body in
       [
 	def_bin_op "+" int_type **> app2i ( + );
@@ -497,7 +499,24 @@ end = struct
 	    add_word **> Word.def_user name code signature;
 	);
       
-      (* def "?" (tsig [ U.Term ("code", [U.Var "a"; U.Var "b"] *)
+      def "?" (tsig [closure_type;closure_type;closure_type;] [U.Var "b"])
+	(fun () ->
+	  let cond_code = pop_code () in
+	    Run.execute_code cond_code;
+	    let cond = pop_bool () in
+	    let b1 = pop_code() in
+	    let b2 = pop_code() in
+	      if cond then 
+		Run.execute_code b1
+	      else 
+		Run.execute_code b2);
+      def "b." (tsig [bool_type] [])
+       (with_flush
+	(fun () ->
+	 let b = pop_bool () in
+	   print_bool b));
+	
+	
 (*
       def "!"  (tsig [U.Var "a"] [U.Var "b"] ) **> lift1c **>
 	(fun code ->
