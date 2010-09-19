@@ -53,6 +53,14 @@ let rec rename i = function
   | Var n' -> Var (Printf.sprintf "%s%d" n' i) 
   | Term (n,l) -> Term (n, List.map (rename i) l)
 
+  let rec combine_l x y =
+    let rec loop = function
+      | x :: xs,y :: ys -> (x,y) :: loop (xs,ys)
+      | [], _ -> []
+      | _, [] -> []
+    in
+      loop (x,y)
+
 let rec unify = function
   | Var(n), t -> 
       if Var(n) = t then [] else
@@ -68,7 +76,7 @@ let rec unify = function
 	fold_left 
 	  (fun s (t1',t2') -> 
 	     compose (unify ((apply s t1'), apply s t2')) s)
-	  [] (combine t1 t2)
+	  [] (combine_l t1 t2)
 
 let rec to_string = 
   function

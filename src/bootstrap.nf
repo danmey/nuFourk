@@ -12,7 +12,7 @@
 
 [ "Number: " show . \n ] : number
 
-[ 0 [ dup number ] [ 1 + dup 10 < ] loop ] $
+[ 0 [ dup number ] [ 1 + dup 10 < ] loop ] check
 
 [ "" [ append ] [ key dup 32 <> ] loop drop ] : token
 

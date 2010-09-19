@@ -124,7 +124,13 @@ type stack_effect =
   | Leaving of U.t list
 
   let null_effect = Accepting []
-
+  let rec combine_l x y =
+    let rec loop = function
+      | x :: xs,y :: ys -> (x,y) :: loop (xs,ys)
+      | [], _ -> []
+      | _, [] -> []
+    in
+      loop (x,y)
   let rec check_effects signatures l r effect =
     let rec unify_types signatures combined effect =
       let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined in
@@ -138,7 +144,7 @@ type stack_effect =
 	  | _ -> 
 	    let o, i = List.split combined in
 	    let o', i', effect' = U.apply_all subst o, U.apply_all subst i, U.apply_all subst effect in
-	      unify_types signatures' (List.combine o' i') effect'
+	      unify_types signatures' (combine_l o' i') effect'
     in
 
     let rec combine a b =

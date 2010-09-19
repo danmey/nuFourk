@@ -545,7 +545,7 @@ end = struct
 	    else 
 	      Run.execute_code b2);
 
-      def "loop" (tsig [ closure_type2 "d" "c";closure_type "b" "e";] [U.Var "e"])
+      def "loop" (tsig [ U.Term ("code", [U.Var "e";U.Term ("list", [bool_type])]);closure_type "e" "b"; ] [])
 	(fun () ->
 	  let cond_code = pop_code () in
 	  let body = pop_code() in
