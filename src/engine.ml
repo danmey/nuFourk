@@ -509,7 +509,7 @@ end = struct
 	macro "]" (tsig [] [ U.Term ("code", [U.Var "a"; U.Var "b"]) ]) **> 
 	  (fun () -> 
 	    let code = !(Stack.pop model.codebuf) in
-	    let _, signature = Type.signature_of_code (Model.get_dict()) **> List.rev **> code in
+	    let signature = Type.signature_of_code (Model.get_dict()) **> List.rev **> code in
 	      (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code) 
 	       else
 		  (fun l -> append_opcode **> Code.PushCode l)) **> List.rev code);
@@ -527,7 +527,7 @@ end = struct
 	tok1 **>
 	(fun model name ->
 	  let code = pop_code model in
-	  let _,signature = Type.signature_of_code (Model.get_dict ()) code in
+	  let signature = Type.signature_of_code (Model.get_dict ()) code in
 	    add_word **> Word.def_user name code signature;
 	);
 
@@ -581,7 +581,7 @@ end = struct
 
       def "check" (tsig [U.Term ("code", [U.Var "a";U.Var "b"])] []) **> lift1c **>
 	(fun code ->
-	  print_endline **> Type.signature_to_string **> snd (Type.signature_of_code (Model.get_dict ()) code);
+	  print_endline **> Type.signature_to_string **> (Type.signature_of_code (Model.get_dict ()) code);
 	  flush stdout;
 	);
       

@@ -20,6 +20,7 @@ open Unify
 open Code
 open BatList
 open BatPervasives
+open BatList.Exceptionless
 
 type signature = {
   input  : U.t list;
@@ -195,7 +196,7 @@ type stack_effect =
       | PushBool _ ::xs -> loop ({ input = []; output = [bool_type] }::acc) xs 
       | PushString _ ::xs -> loop ({ input = []; output = [string_type] }::acc) xs 
       | PushCode code::xs ->
-	let signature = snd(signature_of_code dict code) in
+	let signature = signature_of_code dict code in
 	  loop ({ input = []; output = [U.Term ("code", [U.Term ("list", signature.input); U.Term ("list", signature.output)])] }::acc) xs
       | Call name::xs -> loop ((List.assoc name dict)::acc) xs 
       | [] -> acc
@@ -247,33 +248,30 @@ type stack_effect =
 	else
 	  type_loop signatures' 
     in
-      type_loop signatures
-(*
-    | App ->
-      match output with
-	| func :: output ->
-	  begin
-	    let check
-	    match func with
-	      | U.Term ( "closure",
-			 U.Term ( "list", input' ),
-			 U.Term ( "list", output' ) ) ->
-		if output <> output' then type_error output output'
-		else { current with output = output  input }
-*)
+    let _,{ input = inp; output = out }  = type_loop signatures in
+    let rec variable_map ass char = 
+      function
+	| U.Var nm -> 
+	  (match BatList.Exceptionless.assoc nm ass with
+	    | Some _ -> char, ass
+	    | None -> (char_of_int **> (int_of_char char + 1)), (nm, char)::ass)
+	| U.Term (_, lst) -> 
+	  List.fold_left 
+	    (fun (char,ass) el -> variable_map ass char el) (char, ass) lst
+    in
+    let rec replace_vars ass =
+      function
+	| U.Var nm -> U.Var (string_of_char (List.assoc nm ass))
+	| U.Term (nm, lst) -> U.Term (nm, List.map (replace_vars ass) lst)
+    in
+    let rec loop ch ass =
+	function
+	  | x :: xs -> let ch', ass' = variable_map ass ch x in
+			 loop ch' ass' xs
+	  | [] -> ch, ass
+    in
+    let _, ass = loop 'a' [] (inp@out) in
+    let inp, out = List.map (replace_vars ass) inp, List.map (replace_vars ass) out in
+      { input = inp; output = out }
+			 
 
-
-(*
-let rec basic_type_to_string a_type =
-  function
-    | U.Term ( name, [ ] ) -> name
-    | _ -> failwith "basic_type_to_string"
-and arguments_of_string a_types =
-  String.concat
-and type_to_string
-
-    function
-    | U.Term ( "closure",
-	       U.Term ( "list", input ),
-	       U.Term ( "list", output ) ) -> Printf.printf "closure of type ( %s )" (type_of_string
-*)
