@@ -95,15 +95,29 @@ in
 and check_type dictionary current = 
   List.fold_left (check dictionary) current
 
-let signature_to_string {
-  input = input;
-  output = output;
-} =
-  let aux = String.concat " -> " -| List.map U.to_string in
+
+
+let rec to_string u =
+  match u with
+    | U.Term ("code", [U.Term("list", l1);U.Term("list", l2)]) -> Printf.sprintf "(%s)" (tos l1 l2)
+    | U.Term ("code", [l1;l2]) -> Printf.sprintf "(%s)" (tos [l1] [l2])
+    | U.Term ("list", l) -> Printf.sprintf "%s" (aux l) 
+    | U.Term (nm, l) when List.length l == 0 -> Printf.sprintf "%s" nm
+    | U.Term (nm, l) ->
+	Printf.sprintf "(%s %s)" nm (aux l)
+    | U.Var (nm) -> Printf.sprintf "%s'" nm
+and aux u = String.concat " -> " **> List.map to_string u
+and  tos input output =
   let input_str = aux input in
   let output_str = aux output in
     String.concat " : " [ input_str; output_str ]
 
+
+let signature_to_string {
+  input = input;
+  output = output;
+} = tos input output
+  
 type stack_effect = 
   | Accepting of U.t list
   | Leaving of U.t list
@@ -141,7 +155,6 @@ type stack_effect =
       match effect with
 	| Leaving a -> signatures', { output = effect'; input = [] }
 	| Accepting a -> signatures', { output = []; input = effect' }
-	  
   let check_pair signatures { input = input1; output = output1 } { input = input2; output = output2 } =
     let signatures', { input = input'; output = output' } = check_effects signatures output1 input2 null_effect 
     in
@@ -156,23 +169,27 @@ type stack_effect =
 	  | x -> x
 	) in
 
-    let sanitase1 = (function
-	  | { output = [U.Term ("list", x)];
-	      input = inp } -> { output = x; input = inp} 
-	  | x -> x
-	) in
+    let rec sanitaze_u = function
+      | U.Var n -> U.Var n 
+      | U.Term(n, lst) when n <> "code" -> 
+	(match lst with
+	  | [ U.Term("list", lst')] -> U.Term(n, lst')
+	  | x -> U.Term(n, x))
+      | U.Term(n, lst) -> U.Term(n, List.map sanitaze_u lst)
+    in
+	  
+
+    let rec sanitase1 = function
+      | { output = o; input = i } -> { output = List.map sanitaze_u o; input = List.map sanitaze_u i}
+    in
     
     let to_signatures lst = 
       let rec loop acc lst =
 	let out = match lst with
-	| App::xs -> (match acc with
-	    | [] ->  { 
-	      input = [U.Term ("code", [U.Term ("list", [U.Var "a"]); U.Term ("list", [U.Var "b"])])];
-	      output = [U.Var "b"]} :: acc
-	    | s::acc ->
-	      (match s with
-		  { output = [U.Term ("code", [U.Term ("list", inp); U.Term ("list", out)])];
-		    input = _} -> loop ({ input = inp; output = out } :: acc) xs))
+	| App::xs -> 
+	  loop ({ 
+	    input = [U.Term ("code", [U.Term ("list", [U.Var "a"]); U.Term ("list", [U.Var "b"])])];
+	    output = [U.Var "b"]} :: acc) xs
       | PushInt _ :: xs -> loop ({ input = []; output = [int_type] }::acc) xs 
       | PushFloat _ ::xs -> loop ({ input = []; output = [float_type] }::acc) xs 
       | PushBool _ ::xs -> loop ({ input = []; output = [bool_type] }::acc) xs 
@@ -226,7 +243,7 @@ type stack_effect =
  	| [] -> [], void_signature
       in
 	if signatures = signatures' then
-	  signatures', sign
+	  signatures', sanitase1 sign
 	else
 	  type_loop signatures' 
     in

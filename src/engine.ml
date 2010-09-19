@@ -391,6 +391,10 @@ end = struct
 	  | Error.Runtime_Type str -> top_er str
 	  | Error.Symbol_Not_Bound str -> top_er str
 	  | Error.Stack_Underflow -> top_er "Stack underflow!"
+	  | U.Unify_fail (first,second) -> 
+	    top_er (Printf.sprintf "Expected type `%s', found `%s'!" first second)
+	  | Stack.Empty -> top_er "Stack empty!"
+
       end
 
   let start() =
@@ -413,7 +417,7 @@ end = struct
   open Model
   open Type
     
-  let swap (a,b) = (b,a)
+  let swap (a,b) = (a,b)
   let init model =
     let app_pair f =
       swap (f (), f ())
@@ -531,28 +535,28 @@ end = struct
 	let i1, i2 = pop_int(), pop_int() in 
 	  push_bool (i1 < i2));
 
-      def "?" (tsig [closure_type "c" "d";closure_type2 "a" "e"; closure_type2 "b" "e" ;] [U.Var "e"])
+      def "?" (tsig [closure_type2 "a" "e"; closure_type2 "b" "e" ;bool_type] [U.Var "e"])
 	(fun () ->
-	  let cond_code = pop_code () in
 	  let b1 = pop_code() in
 	  let b2 = pop_code() in
-	    Run.execute_code cond_code;
-	    let cond = pop_bool () in
-	      if cond then 
-		Run.execute_code b1
-	      else 
-		Run.execute_code b2);
+	  let cond = pop_bool () in
+	    if cond then 
+	      Run.execute_code b1
+	    else 
+	      Run.execute_code b2);
 
-      def "loop" (tsig [closure_type "b" "e"; closure_type2 "d" "c" ;] [U.Var "c"])
+      def "loop" (tsig [ closure_type2 "d" "c";closure_type "b" "e";] [U.Var "e"])
 	(fun () ->
 	  let cond_code = pop_code () in
 	  let body = pop_code() in
 	  let rec loop () =
-	    Run.execute_code body;
 	    Run.execute_code cond_code;
 	    let cond = pop_bool () in
 	      if cond then 
+		begin
+		  Run.execute_code body;
 		  loop()
+		end
 	      else
 		  () 
 	  in

@@ -74,10 +74,7 @@ let rec to_string =
   function
     | Term (nm, l) when List.length l == 0 -> Printf.sprintf "%s" nm
     | Term (nm, l) ->
-      (if List.length l == 1 then 
-	Printf.sprintf "%s %s" nm
-      else
-	Printf.sprintf "(%s %s)" nm) **> String.concat " " **> List.map to_string l
+	Printf.sprintf "(%s %s)" nm **> String.concat " " **> List.map to_string l
     | Var (nm) -> Printf.sprintf "%s'" nm
 
 open List
