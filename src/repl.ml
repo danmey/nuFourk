@@ -1,6 +1,2 @@
-open Lexer
-open Engine
-open BatPervasives
+Bootstrap.start()
 
-  
-let _ = main()
