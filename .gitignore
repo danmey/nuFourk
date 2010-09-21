@@ -1,4 +1,7 @@
-parser.ml
-.\#*
-*.cm*
-repl
+_log
+_build
+_junk
+*.native
+*.byte
+*.d.native
+*.p.byte

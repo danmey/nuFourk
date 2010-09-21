@@ -210,8 +210,9 @@ module rec Model : sig
   type state =
     | Interpreting
     | Compiling
-
+	
   type t = {
+    env    : (string * Value.t) list;
     stack  : Cell.t Stack.t;
     cells  : Cell.t array;
     dict   : Dictionary.t;
@@ -236,7 +237,7 @@ module rec Model : sig
   val get_dict  : unit -> Type.dictionary
   val lookup_symbol  : string -> Word.t
   val append_opcode  : Code.opcode -> unit
-
+  (* val get_variable   : string -> Value.t *)
 end = struct
   open Stack
 
@@ -245,6 +246,7 @@ end = struct
     | Compiling
 
   type t = {
+    env    : (string * Value.t) list;
     stack  : Cell.t Stack.t;
     cells  : Cell.t array;
     dict   : Dictionary.t;
@@ -254,12 +256,13 @@ end = struct
   }
   let heap_size = 1000
   let model = {
-      stack   = Stack.create();
-      cells   = Array.create heap_size Value.Empty;
-      dict    = Dictionary.create();
-      lexbuf  = from_input stdin;
-      codebuf = Stack.create();
-      state   = Interpreting }
+    env     = [];
+    stack   = Stack.create();
+    cells   = Array.create heap_size Value.Empty;
+    dict    = Dictionary.create();
+    lexbuf  = from_input stdin;
+    codebuf = Stack.create();
+    state   = Interpreting }
 
   let push_int i = push (Value.Int i) model.stack
 
@@ -381,7 +384,7 @@ end = struct
 		| Token.Integer v -> Model.append_opcode **> Code.PushInt v
 		| Token.Float v -> Model.append_opcode **> Code.PushFloat v
 		| Token.String v -> Model.append_opcode **> Code.PushString v
-		| Token.Word "$" -> Model.append_opcode **> Code.App
+		| Token.Word "$" -> Model.append_opcode **> Code.App (* Uggly *)
 		| Token.Word name ->
 		  let w = Model.lookup_symbol name in
 		    (match w.Word.kind with
@@ -399,7 +402,7 @@ end = struct
 
   let start() =
     Boostrap.init Model.model;
-    let rec loop () = 
+    let rec loop () =
       let token = Lexer.next_token Model.model.Model.lexbuf in
 	run token;
 	loop ()
@@ -485,17 +488,6 @@ end = struct
 	def "rot" (tsig [U.Var "a"; U.Var "b";U.Var "c"] [U.Var "b";U.Var "c"; U.Var "a"]) 
 	  (fun () -> let a, b, c = pop_value(), pop_value(), pop_value() 
 		     in push_value b; push_value c; push_value a);
-
-	def "i" (tsig [] [int_type]) (fun () -> push_int 1);
-	def "f" (tsig [] [float_type]) (fun () -> push_float 1.);
-
-	def "if->i" (tsig [int_type;float_type] [int_type]) (fun () -> ());
-	def "if->f" (tsig [int_type;float_type] [float_type]) (fun () -> ());
-	def "->i" (tsig [int_type] []) (fun () -> ());
-	def "->f" (tsig [float_type] []) (fun () -> ());
-	def "i->f" (tsig [int_type] [float_type]) (fun () -> ());
-	def "f->i" (tsig [float_type] [int_type]) (fun () -> ());
-	def "f->if" (tsig [float_type] [int_type;float_type]) (fun () -> ());
 	
 	def "false" (tsig [] [bool_type]) (fun () -> push_bool false);
 	def "true" (tsig [] [bool_type]) (fun () -> push_bool true);
@@ -513,7 +505,6 @@ end = struct
 	      (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code) 
 	       else
 		  (fun l -> append_opcode **> Code.PushCode l)) **> List.rev code);
-
 	
 	
 (*
@@ -545,7 +536,7 @@ end = struct
 	    else 
 	      Run.execute_code b2);
 
-      def "loop" (tsig [ U.Term ("code", [U.Var "e";U.Term ("list", [bool_type])]);closure_type "e" "b"; ] [])
+      def "loop" (tsig [ U.Term ("code", [U.Var "e";U.Term ("list", [bool_type])]);closure_type "b" "e"; U.Var "b" ] [U.Var "e"])
 	(fun () ->
 	  let cond_code = pop_code () in
 	  let body = pop_code() in

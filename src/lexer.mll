@@ -39,7 +39,7 @@ rule next_token =
 
   parse
     | comment         { next_token lexbuf }
-    | string as t     { Token.String (String.sub t 1 ((String.length t) - 2)) }
+    | string as t     { Token.String (String.sub t 1 ((String.length t) - 2))}
     | whites          { next_token lexbuf }
     | float_num as t  { Token.Float (float_of_string t)}
     | int_num as t    { Token.Integer (int_of_string t) }

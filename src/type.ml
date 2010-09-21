@@ -97,7 +97,19 @@ and check_type dictionary current =
   List.fold_left (check dictionary) current
 
 
+    let rec sanitaze_u = function
+      | U.Var n -> U.Var n 
+      | U.Term(n, lst) when n <> "code" -> 
+	(match lst with
+	  | [ U.Term("list", lst')] -> U.Term(n, lst')
+	  | x -> U.Term(n, x))
+      | U.Term(n, lst) -> U.Term(n, List.map sanitaze_u lst)
 
+    let rec sanitase1 = function
+      | { output = o; input = i } -> { output = List.map sanitaze_u o; input = List.map sanitaze_u i}
+
+    let sanitaze_u a = a
+    let sanitase1 a = a
 let rec to_string u =
   match u with
     | U.Term ("code", [U.Term("list", l1);U.Term("list", l2)]) -> Printf.sprintf "(%s)" (tos l1 l2)
@@ -107,11 +119,11 @@ let rec to_string u =
     | U.Term (nm, l) ->
 	Printf.sprintf "(%s %s)" nm (aux l)
     | U.Var (nm) -> Printf.sprintf "%s'" nm
-and aux u = String.concat " -> " **> List.map to_string u
+and aux u = String.concat " " **> List.map to_string u
 and  tos input output =
   let input_str = aux input in
   let output_str = aux output in
-    String.concat " : " [ input_str; output_str ]
+    String.concat " -> " [ input_str; output_str ]
 
 
 let signature_to_string {
@@ -132,6 +144,8 @@ type stack_effect =
     in
       loop (x,y)
   let rec check_effects signatures l r effect =
+    let l = List.map sanitaze_u l in
+    let r = List.map sanitaze_u r in
     let rec unify_types signatures combined effect =
       let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined in
       let subst_sig ({ input = input; output = output }) =
@@ -176,19 +190,6 @@ type stack_effect =
 	  | x -> x
 	) in
 
-    let rec sanitaze_u = function
-      | U.Var n -> U.Var n 
-      | U.Term(n, lst) when n <> "code" -> 
-	(match lst with
-	  | [ U.Term("list", lst')] -> U.Term(n, lst')
-	  | x -> U.Term(n, x))
-      | U.Term(n, lst) -> U.Term(n, List.map sanitaze_u lst)
-    in
-	  
-
-    let rec sanitase1 = function
-      | { output = o; input = i } -> { output = List.map sanitaze_u o; input = List.map sanitaze_u i}
-    in
     
     let to_signatures lst = 
       let rec loop acc lst =
