@@ -60,19 +60,23 @@ let init model =
   let def_bin_op_ret name typ ret body = adef name (sign [ typ; typ ] [ ret ]) body in
 
   let mk_var ch = U.Var (string_of_char ch) in
- 
+  let v a = U.Var (string_of_char a) in
   let mk_vars = List.map mk_var in
   
   let def_poly_op name (consume, produce) = 
     adef name (sign (mk_vars consume) (mk_vars produce)) 
+  in
+
+  let def_op name (consume, produce) = 
+    adef name (sign consume produce)
   in
     
   let def_const name typ value = 
     adef name (sign [] [bool_type]) (fun () -> push_value value)
   in
   let def = adef in
-  let ( --> ) a b = a,b in
-
+  let ( --> ) a b = a, b in
+  let ( ---> ) a b = [U.Term ("code", [U.Term ("list", a); U.Term ("list", b)])] in
 	[
 	  def_bin_op "+" int_type **> app2i ( + );
 	  def_bin_op "-" int_type **> app2i ( - );
@@ -83,7 +87,8 @@ let init model =
 	  def_bin_op "f-" float_type **> app2f ( -. );
 	  def_bin_op "f/" float_type **> app2f ( /. );
 	  def_bin_op "f*" float_type **> app2f ( *. );
-
+	  
+	  (* Should be expressed as monads *)
 	  def_poly_op "swap" 
 	    (['a'; 'b'] --> ['b'; 'a']) 
 	    (fun () -> 
@@ -100,7 +105,7 @@ let init model =
 		push_value a);
 	  
 	  def_poly_op "rot" 
-	  (['a'; 'b'; 'c'] --> ['b'; 'c'; 'a'])
+	    (['a'; 'b'; 'c'] --> ['b'; 'c'; 'a'])
 	    (fun () -> 
 	      let a, b, c = 
 		pop_value(), 
@@ -109,8 +114,18 @@ let init model =
 		push_value b; 
 		push_value c; 
 		push_value a);
+
+	  def_op "=" ([v 'a'; v 'a'] --> [bool_type])
+	    (fun () -> 
+	      let v1, v2 = 
+		pop_value(), 
+		pop_value() in 
+		push_bool (v1 = v2));
+	  
+	  def_op "test2" (([v 'A'] ---> [v 'A']) --> ([v 'A'] ---> [v 'A'])) (fun () -> ());
 	  
 	  def_const "false" bool_type (Value.Bool false);
+
 	  def_const "true" bool_type (Value.Bool true);
 
 
@@ -210,9 +225,7 @@ let init model =
 	let s = Type.signature_to_string signature in
 	  print_endline s);
       
-      def_bin_op_ret "=" int_type bool_type (fun () -> 
-	let i1, i2 = pop_int(), pop_int() in 
-	  push_bool (i1 = i2));
+
       
       def "key" (sign [] [int_type]) **> 
 	(fun () ->

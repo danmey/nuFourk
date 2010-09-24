@@ -61,7 +61,19 @@ let rec rename i = function
     in
       loop (x,y)
 
-let rec unify = function
+let rec to_string = 
+  function
+    | Term (nm, l) when List.length l == 0 -> Printf.sprintf "%s" nm
+    | Term (nm, l) ->
+	Printf.sprintf "(%s %s)" nm **> String.concat " " **> List.map to_string l
+    | Var (nm) -> Printf.sprintf "%s'" nm
+
+let rec unify (a, b) = 
+  (* Printf.printf "%s :: %s\n\n" (to_string a) (to_string b); *)
+  match a,b with
+  | Term("code", 
+	 [Term("list",[]);e]), Term("code", [Term("list", [c]); Term ("list", [d])]) ->
+    (match c,d with | _, d -> unify (d,e))
   | Var(n), t -> 
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail (n,"OCCUR"))
@@ -77,13 +89,6 @@ let rec unify = function
 	  (fun s (t1',t2') -> 
 	     compose (unify ((apply s t1'), apply s t2')) s)
 	  [] (combine_l t1 t2)
-
-let rec to_string = 
-  function
-    | Term (nm, l) when List.length l == 0 -> Printf.sprintf "%s" nm
-    | Term (nm, l) ->
-	Printf.sprintf "(%s %s)" nm **> String.concat " " **> List.map to_string l
-    | Var (nm) -> Printf.sprintf "%s'" nm
 
 open List
 let apply_all subs exps =

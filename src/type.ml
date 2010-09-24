@@ -96,7 +96,6 @@ in
 and check_type dictionary current = 
   List.fold_left (check dictionary) current
 
-
     let rec sanitaze_u = function
       | U.Var n -> U.Var n 
       | U.Term(n, lst) when n <> "code" -> 
@@ -120,7 +119,7 @@ let rec to_string u =
 	Printf.sprintf "(%s %s)" nm (aux l)
     | U.Var (nm) -> Printf.sprintf "%s'" nm
 and aux u = String.concat " " **> List.map to_string u
-and  tos input output =
+and tos input output =
   let input_str = aux input in
   let output_str = aux output in
     String.concat " -> " [ input_str; output_str ]
@@ -129,7 +128,8 @@ and  tos input output =
 let signature_to_string {
   input = input;
   output = output;
-} = tos input output
+} = Printf.sprintf "%s\n%s ---- %s" (tos input output) "" ""
+  (* (String.concat "\n" (List.map U.to_string input)) (String.concat "\n" (List.map U.to_string output)) *)
   
 type stack_effect = 
   | Accepting of U.t list
