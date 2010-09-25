@@ -353,12 +353,13 @@ end = struct
   and execute_code value =
     List.iter
       (function
-	| Code.PushInt v   -> Model.push_int v
-	| Code.PushFloat v -> Model.push_float v
+	| Code.PushInt v    -> Model.push_int v
+	| Code.PushFloat v  -> Model.push_float v
 	| Code.PushString v -> Model.push_string v
-	| Code.PushCode v  -> Model.push_code v
-	| Code.App         -> let code = Model.pop_code() in execute_code code
-	| Code.Call w      -> execute_symbol w) value
+	| Code.PushCode v   -> Model.push_code v
+	| Code.PushBool v   -> Model.push_bool v
+	| Code.App          -> let code = Model.pop_code() in execute_code code
+	| Code.Call w       -> execute_symbol w) value
       
   and execute_symbol symbol =
     let w = Model.lookup_symbol symbol

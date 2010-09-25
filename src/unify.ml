@@ -29,17 +29,23 @@ module U = struct
 
 type t =
   | Var of string 
-  | Term of string * t list
+  | Term of string * t list * t list
 
 let rec vars = function
   | Var n' -> [n']
-  | Term (_,l) -> flatten (map vars l)
+  | Term (_,l,r) -> flatten (map vars l) @ flatten (map vars r)
+
+let prim name = Term (name, [], [])
+
+let var name = Var name
+
+let arrow lhs rhs = Term ("arrow", lhs, rhs)
 
 let rec occurs t n = mem n (vars t)
   
 let rec apply s = function
   | Var n -> (try assoc n s with Not_found -> Var n)
-  | Term (n,l) -> Term (n, map (apply s) l)
+  | Term (n,l,r) -> Term (n, map (apply s) l, map (apply s) r)
 
 let i = ignore  
 
@@ -51,7 +57,7 @@ exception Unify_fail of string * string
 
 let rec rename i = function
   | Var n' -> Var (Printf.sprintf "%s%d" n' i) 
-  | Term (n,l) -> Term (n, List.map (rename i) l)
+  | Term (n,l,r) -> Term (n, List.map (rename i) l, List.map (rename i) r)
 
   let rec combine_l x y =
     let rec loop = function
@@ -63,17 +69,15 @@ let rec rename i = function
 
 let rec to_string = 
   function
-    | Term (nm, l) when List.length l == 0 -> Printf.sprintf "%s" nm
-    | Term (nm, l) ->
-	Printf.sprintf "(%s %s)" nm **> String.concat " " **> List.map to_string l
+    | Term (nm, l, r ) ->
+	Printf.sprintf "(%s: %s -> %s)" nm 
+	  (String.concat " "  (List.map to_string l))
+	  (String.concat " "  (List.map to_string r))
     | Var (nm) -> Printf.sprintf "%s'" nm
 
 let rec unify (a, b) = 
   (* Printf.printf "%s :: %s\n\n" (to_string a) (to_string b); *)
   match a,b with
-  | Term("code", 
-	 [Term("list",[]);e]), Term("code", [Term("list", [c]); Term ("list", [d])]) ->
-    (match c,d with | _, d -> unify (d,e))
   | Var(n), t -> 
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail (n,"OCCUR"))
@@ -82,13 +86,19 @@ let rec unify (a, b) =
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail ("OCCUR",n))
 	else [n,t]
-  | Term(n1, t1), Term(n2, t2) ->
+  | Term(n1, l1, r1), Term(n2, l2, r2) ->
       if n1 <> n2 then raise (Unify_fail (n1,n2))
       else
-	fold_left 
-	  (fun s (t1',t2') -> 
-	     compose (unify ((apply s t1'), apply s t2')) s)
-	  [] (combine_l t1 t2)
+	let first = 
+	  fold_left 
+	    (fun s (t1',t2') -> 
+	      compose (unify ((apply s t1'), apply s t2')) s)
+	  [] (combine_l l1 l2) in
+	  fold_left 
+	    (fun s (t1',t2') -> 
+	      compose (unify ((apply s t1'), apply s t2')) s)
+	    first (combine_l r1 r2)
+	
 
 open List
 let apply_all subs exps =
