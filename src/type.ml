@@ -139,34 +139,42 @@ and check_type_effect effect all first second  =
   let effect', combined_sign = 
     combine_with_effect (first, second) in
 
-  let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined_sign in
+  let subst = 
+    List.fold_left 
+      (fun subst el -> 
+	subst @ U.unify el) 
+      [] combined_sign in
 
   let subst_sig (a,b) =
-	U.apply_all subst a, U.apply_all subst b
+    U.apply_all subst a, U.apply_all subst b
   in
-    
+ let strip_effect =
+    function
+      | Leaving a -> a
+      | Accepting a -> a
+  in
+
+  let wrap_effect original a =
+    match original with
+      | Leaving _ -> Leaving a
+      | Accepting _ -> Accepting a
+  in
+
+
   let all' = List.map subst_sig all in
 
-  (* let rec combine_l x y = *)
-  (*   let rec loop = function *)
-  (*     | x :: xs,y :: ys -> (x,y) :: loop (xs,ys) *)
-  (*     | [], _ -> [] *)
-  (*     | _, [] -> [] *)
-  (*   in *)
-  (*     loop (x,y) in *)
-
-
   let first', second' = List.split combined_sign in
-  let first'', second'' = 
+  let first'', second'', effect'' = 
     U.apply_all subst first', 
-    U.apply_all subst second' 
+    U.apply_all subst second',
+    wrap_effect effect' (U.apply_all subst (strip_effect effect'))
   in
-  let ret = all', effect', (first'', second'') in
+  let ret = all', effect'', (first'', second'') in
     match subst with
       | [] -> ret
       | _ when all = all' -> ret
       | _ -> 
-	check_type_effect effect' all' first'' second''    
+	check_type_effect effect'' all' first'' second''    
 
 and signature_of_code dict code =
   let null_effect = Accepting [] in
@@ -183,13 +191,58 @@ and signature_of_code dict code =
       all', effect', (l1 @ l', r2 @ r') in
 
     let rec pair_loop all effect previous = function
-    | current :: rest -> 
-      let all', effect', sign = check_pair all previous current effect in
-	pair_loop all' effect' sign rest
-    | [] -> all, previous
+      | current :: rest -> 
+	let all', effect', sign = check_pair all previous current effect in
+	  pair_loop all' effect' sign rest
+      | [] -> all, previous
     in
 
-  let signatures = List.map unified_signature (code_signatures dict code) in
+  let signatures = 
+    List.map unified_signature 
+      (code_signatures dict code) in
+
+
+    let rec fold_new_variables (char, ass) = 
+      let inc_char char = char_of_int ((int_of_char char) + 1) in
+      function
+	| U.Var nm -> 
+	  (match BatList.Exceptionless.assoc nm ass with
+	    | Some _ -> char, ass
+	    | None -> inc_char char, (nm, char)::ass)
+	| U.Term (_, l, r) -> 
+	  let char, ass = 
+	    List.fold_left
+	      (fun (char, ass) el -> 
+		fold_new_variables (char, ass) el) (char, ass) l in
+	  let char', ass' = 
+	    List.fold_left
+	      (fun (char, ass) el -> 
+		fold_new_variables (char, ass) el) (char, ass) r in
+	    char', ass @ ass'
+      in
+	
+    let rec replace_vars ass =
+      function
+    	| U.Var nm -> U.Var (string_of_char (List.assoc nm ass))
+    	| U.Term (nm, l,r)-> 
+	  U.Term (nm, 
+		  List.map (replace_vars ass) l, 
+		  List.map (replace_vars ass) r)
+    in
+
+    let normalize_signature (char, lst) (l, r) = 
+      let char, vars = List.fold_left fold_new_variables (char,[]) (l @r ) in
+	char, lst @ [List.map (replace_vars vars) l, List.map (replace_vars vars) r]
+    in
+
+    let normalize_signatures lst = snd (List.fold_left normalize_signature ('a', []) lst)
+    in
+    let rename = 
+      snd -| List.fold_left 
+	(fun (i, acc) (a, b) ->
+	  (i+1), acc @ [List.map (U.rename i) a, List.map (U.rename i) b]) 
+	(0,[])
+    in
 
     let rec type_loop signatures =
       let signatures', sign = 
@@ -197,188 +250,14 @@ and signature_of_code dict code =
 	  | current :: rest -> pair_loop signatures null_effect void_signature signatures
  	  | [] -> [], void_signature
       in
+
 	if signatures = signatures' then
 	  signatures', sign
 	else
-	  type_loop signatures' 
+	  type_loop signatures'
     in
 
-  let _, sign = type_loop signatures in
-    normal_signature sign
-
-
-    (* let to_signatures lst =  *)
-    (*   let prim_signature t = [], [t] in *)
-    (*   let rec loop acc lst = *)
-    (* 	let out = match lst with *)
-    (* 	| App::xs ->  *)
-    (* 	  loop ({  *)
-    (* 	    input = [U.Term ("code", [U.Term ("list", [U.Var "a"]); U.Term ("list", [U.Var "b"])])]; *)
-    (* 	    output = [U.Var "b"]} :: acc) xs *)
-    (*   | PushInt _ :: xs   -> (loop (prim_signature IntType)    :: acc) xs  *)
-    (*   | PushFloat _ ::xs  -> (loop (prim_signature FloatType)  :: acc) xs  *)
-    (*   | PushBool _ ::xs   -> (loop (prim_signature BoolType)   :: acc) xs  *)
-    (*   | PushString _ ::xs -> (loop (prim_signature StringType) :: acc) xs  *)
-    (*   | PushCode code::xs -> *)
-    (* 	let signature = signature_of_code dict code in *)
-    (* 	  loop ({ input = []; output = [U.Term ("code", [U.Term ("list", signature.input); U.Term ("list", signature.output)])] }::acc) xs *)
-    (*   | Call name::xs -> loop ((List.assoc name dict)::acc) xs  *)
-    (*   | [] -> acc *)
-    (* 	in *)
-    (* 	  sanitase out *)
-    (*   in *)
-    (* 	List.rev (loop [] lst) in *)
-      
-
-(*
-let rec check dictionary ((input, output) as current) =
-  let rec apply_func =
-    function
-      | input, [] -> input
-      | [], x :: xs -> x :: apply_func ([], xs)
-      | x :: xs, y :: ys ->
-	if x <> y then type_error x y
-	else x :: apply_func (xs, ys)
-  in
-*)
-(*
-and check_type dictionary current = 
-  List.fold_left (check dictionary) current
-
-let rec type_to_string =
-  function
-  | BoolType -> "bool"
-  | IntType -> "int"
-  | FloatType -> "float"
-  | VarType name -> Printf.sprintf "'%s" name
-  | Arrow signature -> Printf.sprintf "(%s)" (signature_to_string signature)
-
-and signature_to_string (lhs,rhs) =
-  let concat_types types = 
-    String.concat " " (List.map to_string types) in
-  let lhs_types = concat_types lhs in
-  let rhs_types = concat_types rhs in
-    String.concat " -> " [ lhs_types; rhs_types ]
-    
-type stack_effect = 
-  | Accepting of U.t list
-  | Leaving of U.t list
-
-  let null_effect = Accepting []
-  let rec combine_l x y =
-    let rec loop = function
-      | x :: xs,y :: ys -> (x,y) :: loop (xs,ys)
-      | [], _ -> []
-      | _, [] -> []
-    in
-      loop (x,y)
-  let rec check_effects signatures lhs rhs effect =
-    let rec unify_types signatures combined effect =
-      let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined in
-      let subst_sig ({ input = input; output = output }) =
-	{ input = U.apply_all subst input; output = U.apply_all subst output }
-      in
-      let signatures' = List.map subst_sig signatures in
-	match subst with
-	  | [] -> signatures', effect, combined
-	  | _ when signatures = signatures' -> signatures', effect, combined
-	  | _ -> 
-	    let o, i = List.split combined in
-	    let o', i', effect' = U.apply_all subst o, U.apply_all subst i, U.apply_all subst effect in
-	      unify_types signatures' (combine_l o' i') effect'
-    in
-
-    let rec combine a b =
-      match a,b with
-	| [], b -> Accepting b, []
-	| a, [] -> Leaving a, []
-	| a::xs, b::ys -> 
-	  let effect, result = combine xs ys 
-	  in  effect, (a,b) :: result in
-
-    let effect, combined = combine l r in
-    let e = match effect with Leaving a -> a | Accepting a -> a in
-    let signatures', effect', combined' = unify_types signatures combined e in
-      match effect with
-	| Leaving a -> signatures', { output = effect'; input = [] }
-	| Accepting a -> signatures', { output = []; input = effect' }
-  let check_pair signatures { input = input1; output = output1 } { input = input2; output = output2 } =
-    let signatures', { input = input'; output = output' } = check_effects signatures output1 input2 null_effect 
-    in
-      signatures', { input = input1 @ input'; output = output2 @ output'  }
-
-  let rec signature_of_code dict opcodes =
-    
-    let to_signatures lst = 
-      let prim_signature t = [], [t] in
-      let rec loop acc lst =
-	let out = match lst with
-	| App::xs -> 
-	  loop ({ 
-	    input = [U.Term ("code", [U.Term ("list", [U.Var "a"]); U.Term ("list", [U.Var "b"])])];
-	    output = [U.Var "b"]} :: acc) xs
-      | PushInt _ :: xs   -> (loop (prim_signature IntType)    :: acc) xs 
-      | PushFloat _ ::xs  -> (loop (prim_signature FloatType)  :: acc) xs 
-      | PushBool _ ::xs   -> (loop (prim_signature BoolType)   :: acc) xs 
-      | PushString _ ::xs -> (loop (prim_signature StringType) :: acc) xs 
-      | PushCode code::xs ->
-	let signature = signature_of_code dict code in
-	  loop ({ input = []; output = [U.Term ("code", [U.Term ("list", signature.input); U.Term ("list", signature.output)])] }::acc) xs
-      | Call name::xs -> loop ((List.assoc name dict)::acc) xs 
-      | [] -> acc
-	in
-	  sanitase out
-      in
-	List.rev (loop [] lst) in
-    
-    let rec rename i = function
-      | x :: xs -> { input = List.map (U.rename i) x.input;
-		     output = List.map (U.rename i) x.output;} :: rename (i+1) xs
-      | [] -> []
-    in
-    let signatures = rename 0 **> sanitase **> to_signatures opcodes in
-
-    let rec loop signatures previous = function
-      | current :: rest -> 
-	let signatures', out_signature = check_pair signatures previous current in
-	  loop signatures' (sanitase1 out_signature) rest
-      | [] -> signatures, previous
-    in
-      
-    let rec type_loop signatures =
-      let signatures', sign = 
-	match signatures with
-	| current :: rest -> loop signatures current rest
- 	| [] -> [], void_signature
-      in
-	if signatures = signatures' then
-	  signatures', sanitase1 sign
-	else
-	  type_loop signatures' 
-    in
-    let _,{ input = inp; output = out }  = type_loop signatures in
-    let rec variable_map ass char = 
-      function
-	| U.Var nm -> 
-	  (match BatList.Exceptionless.assoc nm ass with
-	    | Some _ -> char, ass
-	    | None -> (char_of_int **> (int_of_char char + 1)), (nm, char)::ass)
-	| U.Term (_, lst) -> 
-	  List.fold_left 
-	    (fun (char,ass) el -> variable_map ass char el) (char, ass) lst
-    in
-    let rec replace_vars ass =
-      function
-	| U.Var nm -> U.Var (string_of_char (List.assoc nm ass))
-	| U.Term (nm, lst) -> U.Term (nm, List.map (replace_vars ass) lst)
-    in
-    let rec loop ch ass =
-	function
-	  | x :: xs -> let ch', ass' = variable_map ass ch x in
-			 loop ch' ass' xs
-	  | [] -> ch, ass
-    in
-    let _, ass = loop 'a' [] (inp@out) in
-    let inp, out = List.map (replace_vars ass) inp, List.map (replace_vars ass) out in
-      { input = inp; output = out }
-*)
+    let ending_normalize sign = 
+      List.hd (snd (normalize_signature ('a',[]) sign)) in
+    let _, sign = type_loop (rename signatures) in
+      normal_signature (ending_normalize sign)

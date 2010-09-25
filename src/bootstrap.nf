@@ -25,3 +25,10 @@
 ; [ swap [ 2dup rot $ nip2 swap ] swap loop ] : binrec
 
 ; [ 1 swap [ * ] [ 1 - dup 1 < ~ ] binrec drop ] : fact2
+
+f(g(x))
+x g f
+[ : a : b a b ] : swap
+
+
+f (g, x)
