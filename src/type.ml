@@ -20,6 +20,7 @@ open Unify
 open Code
 open BatList
 open BatPervasives
+open BatStd
 open BatList.Exceptionless
 
 type atype = 
@@ -97,6 +98,22 @@ let rec combine_with_effect =
       in  
 	effect, (a,b) :: result
 
+let rec type_to_string =
+  function
+  | BoolType -> "bool"
+  | IntType -> "int"
+  | FloatType -> "float"
+  | StringType -> "\"string\""
+  | VarType name -> Printf.sprintf "'%s" name
+  | ArrowType signature -> Printf.sprintf "(%s)" (signature_to_string signature)
+
+and signature_to_string (lhs,rhs) =
+  let concat_types types = 
+    String.concat " " (List.map type_to_string types) in
+  let lhs_types = concat_types lhs in
+  let rhs_types = concat_types rhs in
+    String.concat " -> " [ lhs_types; rhs_types ]
+
 let rec opcode_to_signatures dictionary =
   let pi = prim_signature in
     function
@@ -115,7 +132,19 @@ and check_code_type dictionary = IntType
 
 and check_type_effect effect all first second  =
 
+  let strip_effect =
+    function
+      | Leaving a -> a
+      | Accepting a -> a
+  in
 
+  let wrap_effect original a =
+    match original with
+      | Leaving _ -> Leaving a
+      | Accepting _ -> Accepting a
+  in
+
+    
   let effect', combined_sign = 
     combine_with_effect (first, second) in
 
@@ -124,7 +153,7 @@ and check_type_effect effect all first second  =
   let subst_sig (a,b) =
 	U.apply_all subst a, U.apply_all subst b
   in
-
+    
   let all' = List.map subst_sig all in
 
   (* let rec combine_l x y = *)
@@ -135,11 +164,6 @@ and check_type_effect effect all first second  =
   (*   in *)
   (*     loop (x,y) in *)
 
-  (* let strip_effect =  *)
-  (*   function  *)
-  (*     | Leaving a -> a  *)
-  (*     | Accepting a -> a  *)
-  (* in *)
 
   let first', second' = List.split combined_sign in
   let first'', second'' = 
@@ -176,24 +200,22 @@ let signature_of_code dict code =
     in
 
   let signatures = List.map unified_signature (code_to_signature dict code) in
-  let _, sign = pair_loop signatures null_effect void_signature signatures in
+
+    let rec type_loop signatures =
+      let signatures', sign = 
+	match signatures with
+	  | current :: rest -> pair_loop signatures null_effect void_signature signatures
+ 	  | [] -> [], void_signature
+      in
+	if signatures = signatures' then
+	  signatures', sign
+	else
+	  type_loop signatures' 
+    in
+
+  let _, sign = type_loop signatures in
     normal_signature sign
 
-let rec type_to_string =
-  function
-  | BoolType -> "bool"
-  | IntType -> "int"
-  | FloatType -> "float"
-  | StringType -> "\"string\""
-  | VarType name -> Printf.sprintf "'%s" name
-  | ArrowType signature -> Printf.sprintf "(%s)" (signature_to_string signature)
-
-and signature_to_string (lhs,rhs) =
-  let concat_types types = 
-    String.concat " " (List.map type_to_string types) in
-  let lhs_types = concat_types lhs in
-  let rhs_types = concat_types rhs in
-    String.concat " -> " [ lhs_types; rhs_types ]
 
     (* let to_signatures lst =  *)
     (*   let prim_signature t = [], [t] in *)
