@@ -122,13 +122,13 @@ let rec opcode_to_signatures dictionary =
       | App           -> pi (ArrowType ([], []))
       | PushInt _     -> pi IntType
       | PushFloat _   -> pi FloatType
-      | PushCode code -> pi (check_code_type code)
+      | PushCode code -> pi (ArrowType (check_code_type dictionary code))
       | Call name     -> List.assoc name dictionary
 
 and code_to_signature dictionary = 
   List.map (opcode_to_signatures dictionary)
 
-and check_code_type dictionary = IntType
+and check_code_type dictionary = signature_of_code dictionary
 
 and check_type_effect effect all first second  =
 
@@ -177,9 +177,9 @@ and check_type_effect effect all first second  =
       | _ -> 
 	check_type_effect effect' all' first'' second''    
 
-let null_effect = Accepting []
 
-let signature_of_code dict code =
+and signature_of_code dict code =
+  let null_effect = Accepting [] in
   let effect_singature =
     function
       | Leaving a   -> [], a
