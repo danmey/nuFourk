@@ -127,7 +127,7 @@ let init model =
 	  def_op "check" (([v 'A'] ---> [v 'B']) --> []) **> lift1c **>
       	    (fun code ->
       	      print_endline 
-	      **> Type.signature_to_string 
+	      **> Type.string_of_signature 
 	      **> (Type.signature_of_code 
 		     (Model.get_dict ()) code);
       	      flush stdout;

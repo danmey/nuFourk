@@ -23,15 +23,17 @@ open BatPervasives
 open BatStd
 open BatList.Exceptionless
 
-type atype = (* Basic type kinds defintions *)
+type atype =				(* Basic type kinds defintions  *)
   | BoolType 
   | IntType
   | FloatType
   | StringType
   | VarType of string
   | ArrowType of signature
-and signature = atype list * atype list
-    
+and signature = atype list * atype list	(* Signature is pair of type kinds,
+					   consumed list of types and produced list or 
+					   types*)
+
 let void_signature = ([], [])
 
 type func = string * signature
@@ -40,7 +42,8 @@ type dictionary = func list
 
 exception Type_error of string
 
-let rec unified_type =
+(* Convert to internal representation for unification algorithm *)
+let rec unified_type = 	
   function
   | BoolType -> U.prim "bool"
   | IntType -> U.prim "int"
@@ -52,9 +55,11 @@ let rec unified_type =
       (List.map unified_type lhs) 
       (List.map unified_type rhs)
 
+(* The same but for signatures *)
 let unified_signature (a,b) =
   List.map unified_type a, List.map unified_type b
 
+(* Convert back from unification data structures *)
 let rec normal_type =
   function
   | U.Term("bool", [], []) -> BoolType 
@@ -67,12 +72,27 @@ let rec normal_type =
 	   List.map normal_type rhs)
   | _ -> failwith (Printf.sprintf "Pattern match: `normal_type'")
 
-let unified_signature (a,b) =
-  List.map unified_type a, List.map unified_type b
-
+(* The same but for signatures *)
 let normal_signature (a,b) =
   List.map normal_type a, List.map normal_type b
 
+(* Convert type kind it to printable representation *)
+let rec string_of_type =
+  function
+  | BoolType -> "bool"
+  | IntType -> "int"
+  | FloatType -> "float"
+  | StringType -> "\"string\""
+  | VarType name -> Printf.sprintf "'%s" name
+  | ArrowType signature -> Printf.sprintf "(%s)" (string_of_signature signature)
+and string_of_signature (lhs,rhs) =
+  let concat_types types = 
+    String.concat " " (List.map string_of_type types) in
+  let lhs_types = concat_types lhs in
+  let rhs_types = concat_types rhs in
+    String.concat " -> " [ lhs_types; rhs_types ]
+
+(* Throw a typing error *)
 let type_error signature signature' =
   let str =
     Printf.sprintf "Expected type `%s', found `%s'!"
@@ -81,12 +101,14 @@ let type_error signature signature' =
   in
   raise (Type_error str)
 
+(* Primitive signature, used by literals *)
 let prim_signature pushed = [], [pushed]
 
-type stack_effect = 
+type stack_effect = 			(* Represent stack effect *)
   | Accepting of U.t list
   | Leaving of U.t list
 
+(* Resolve effect of two signatures *)
 let rec combine_with_effect =
   function
     | [], b -> Accepting b, []
@@ -96,21 +118,7 @@ let rec combine_with_effect =
       in  
 	effect, (a,b) :: result
 
-let rec type_to_string =
-  function
-  | BoolType -> "bool"
-  | IntType -> "int"
-  | FloatType -> "float"
-  | StringType -> "\"string\""
-  | VarType name -> Printf.sprintf "'%s" name
-  | ArrowType signature -> Printf.sprintf "(%s)" (signature_to_string signature)
 
-and signature_to_string (lhs,rhs) =
-  let concat_types types = 
-    String.concat " " (List.map type_to_string types) in
-  let lhs_types = concat_types lhs in
-  let rhs_types = concat_types rhs in
-    String.concat " -> " [ lhs_types; rhs_types ]
 
 let rec opcode_to_signatures dictionary =
   let pi = prim_signature in
