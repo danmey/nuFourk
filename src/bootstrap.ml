@@ -73,7 +73,7 @@ let init model =
   in
   let def = adef in
   let ( --> ) a b = a, b in
-  let ( ---> ) a b = [ArrowType (a, b)] in
+  let ( ---> ) a b = ArrowType (a, b) in
 	[
 	  def_bin_op "+" IntType **> app2i ( + );
 	  def_bin_op "-" IntType **> app2i ( - );
@@ -124,7 +124,8 @@ let init model =
 		pop_value() in 
 		push_bool (v1 = v2));
 	  
-	  def_op "check" (([v 'A'] ---> [v 'B']) --> []) **> lift1c **>
+	  def_op "check" ([[v 'A'] ---> [v 'B']] --> []) 
+	  **> lift1c
       	    (fun code ->
       	      print_endline 
 	      **> Type.string_of_signature 
@@ -133,7 +134,8 @@ let init model =
       	      flush stdout;
       	    );
 
-	  def_op "test2" (([v 'A'] ---> [v 'A']) --> ([v 'A'] ---> [v 'A'])) (fun () -> ());
+	  def_op "test2" ([[v 'A'] ---> [v 'A']] --> [[v 'A'] ---> [v 'A']]) 
+	    ( fun () -> ());
 	  
 	  def_const "false" BoolType (Value.Bool false);
 
@@ -155,7 +157,7 @@ let init model =
 	      Stack.push (ref []) model.codebuf; 
 	      model.state <- Compiling);
 	  
-	  macro "]" ([] --> ([v 'A'] ---> [v 'B'])) **> 
+	  macro "]" ([] --> [[v 'A'] ---> [v 'B']]) **> 
 	    (fun () -> 
 	      let code = !(Stack.pop model.codebuf) in
 	      let _ = Type.signature_of_code 
@@ -169,8 +171,7 @@ let init model =
 		      **> Code.PushCode l)) 
 		**> List.rev code);
       
-      
-      macro ":"  void_signature
+            macro ":"  void_signature
 	(tok1 (fun model name ->
 	  let code = pop_code model in
 	  let signature = Type.signature_of_code (Model.get_dict ()) code in
@@ -182,33 +183,35 @@ let init model =
 	let i1, i2 = pop_int(), pop_int() in 
 	  push_bool (i1 < i2));
       
-      (* def "?" (sign [closure_type "a" "e"; closure_type "b" "e" ;bool_type] [U.Var "e"]) *)
-      (* 	(fun () -> *)
-      (* 	  let b1 = pop_code() in *)
-      (* 	  let b2 = pop_code() in *)
-      (* 	  let cond = pop_bool () in *)
-      (* 	    if cond then  *)
-      (* 	      Run.execute_code b1 *)
-      (* 	    else  *)
-      (* 	      Run.execute_code b2); *)
+      def_op "?" ([[v 'A'; v 'E'] ---> [v 'B'; v 'E'];
+		  [v 'A'; v 'E'] ---> [v 'B'; v 'E']; BoolType;] --> [v 'E'])
+      	(fun () ->
+      	  let b1 = pop_code() in
+      	  let b2 = pop_code() in
+      	  let cond = pop_bool () in
+      	    if cond then
+      	      Run.execute_code b1
+      	    else
+      	      Run.execute_code b2);
+
+      (* def "loop"  *)
+      (*  	(fun () -> *)
+      (*  	  let cond_code = pop_code () in *)
+      (*  	  let body = pop_code() in *)
+      (*  	  let rec loop () = *)
+      (*  	    Run.execute_code cond_code; *)
+      (*  	    let cond = pop_bool () in *)
+      (* 	      if cond then *)
+      (*  		begin *)
+      (*  		  Run.execute_code body; *)
+      (*  		  loop() *)
+      (*  		end *)
+      (*  	      else *)
+      (* 		() *)
+      (*  	  in *)
+      (*  	    loop ()); *)
       
-      (* def "loop" (sign [ U.Term ("code", [U.Var "e";U.Term ("list", [bool_type])]);closure_type "b" "e"; U.Var "b" ] [U.Var "e"]) *)
-      (* 	(fun () -> *)
-      (* 	  let cond_code = pop_code () in *)
-      (* 	  let body = pop_code() in *)
-      (* 	  let rec loop () = *)
-      (* 	    Run.execute_code cond_code; *)
-      (* 	    let cond = pop_bool () in *)
-      (* 	      if cond then  *)
-      (* 		begin *)
-      (* 		  Run.execute_code body; *)
-      (* 		  loop() *)
-      (* 		end *)
-      (* 	      else *)
-      (* 		()  *)
-      (* 	  in *)
-      (* 	    loop ()); *)
-      
+
       def "b." (sign [BoolType] [])
 	(with_flush
 	   (fun () ->
@@ -227,17 +230,16 @@ let init model =
       (* 	  List.iter (fun (name, signature) -> Printf.printf "%s :: %s\n" name (Type.signature_to_string signature)) dict); *)
       
       
-      (* def "type" void_signature **> (fun () -> *)
-      (* 	let name = match Lexer.next_token Model.model.Model.lexbuf with *)
-      (* 	  | Lexer.Token.Word w -> w *)
-      (* 	  | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")  *)
-      (* 	in *)
-      (* 	let word = lookup_symbol name in *)
-      (* 	let signature = match word.Word.code with | Word.Core (_, s) -> s | Word.User (_, s) -> s in *)
-      (* 	let s = Type.signature_to_string signature in *)
-      (* 	  print_endline s); *)
-      
-
+      def "type" void_signature 
+	(fun () ->
+      	  let name = match Lexer.next_token Model.model.Model.lexbuf with
+      	    | Lexer.Token.Word w -> w
+      	    | _ -> raise (Error.Parse_Error "Expected token `name' not token `value'")
+      	  in
+      	  let word = lookup_symbol name in
+      	  let signature = match word.Word.code with | Word.Core (_, s) -> s | Word.User (_, s) -> s in
+      	  let s = Type.string_of_signature signature in
+      	    print_endline s);
       
       def "key" (sign [] [IntType]) **> 
 	(fun () ->
