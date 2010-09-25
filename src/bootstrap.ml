@@ -139,37 +139,43 @@ let init model =
 
 	  def_const "true" BoolType (Value.Bool true);
 
+	  def_op "show" ([StringType] --> []) 
+	    (with_flush 
+	       (fun () -> 
+		 let str = pop_string () 
+		 in print_string str));
 
-	  def "show" (sign [StringType] []) (with_flush (fun () -> let str = pop_string () in print_string str));
-      def "." ( sign [ IntType ] [ ] ) **>
-	with_flush (fun () ->
-	  let v = Model.pop_int () in
-	    Printf.printf "%d" v);
+	  def_op "." ([ IntType] --> [])
+	    (with_flush (fun () ->
+	      let v = Model.pop_int () in
+	    Printf.printf "%d" v));
       
-      macro "[" void_signature **> (fun () -> Stack.push (ref []) model.codebuf; model.state <- Compiling);
-      macro "]" ([] --> ([v 'A'] ---> [v 'B'])) **> 
-	(fun () -> 
-	  let code = !(Stack.pop model.codebuf) in
-	  (* let _ = Type.signature_of_code (Model.get_dict()) **> List.rev **> code in *)
-	    (if Stack.is_empty model.codebuf then (model.state <- Interpreting; push_code) 
-	     else
-		(fun l -> append_opcode **> Code.PushCode l)) **> List.rev code);
+	  macro "[" void_signature 
+	    (fun () -> 
+	      Stack.push (ref []) model.codebuf; 
+	      model.state <- Compiling);
+	  
+	  macro "]" ([] --> ([v 'A'] ---> [v 'B'])) **> 
+	    (fun () -> 
+	      let code = !(Stack.pop model.codebuf) in
+	      let _ = Type.signature_of_code 
+		(Model.get_dict()) **> List.rev **> code 
+	      in
+		(if Stack.is_empty model.codebuf 
+		 then 
+		(model.state <- Interpreting; push_code) 
+		 else
+		    (fun l -> append_opcode 
+		      **> Code.PushCode l)) 
+		**> List.rev code);
       
       
-    (*
-      def ".."  { Types.arguments = st ["code"]; Types.return = [] }   **> (fun model ->
-      print_string "[ ";
-      List.iter (fun x -> Printf.printf "%s " **> Code.to_string x) **> List.rev **> pop_code model;
-      print_string "]";
-      flush stdout);
-    *)
-      macro ":"  void_signature **>
-	tok1 **>
-	(fun model name ->
-	  (* let code = pop_code model in *)
-	  (* let signature = Type.signature_of_code (Model.get_dict ()) code in *)
-	    (* add_word **> Word.def_user name code signature; *)
-	  ()
+      macro ":"  void_signature
+	(tok1 (fun model name ->
+	  let code = pop_code model in
+	  let signature = Type.signature_of_code (Model.get_dict ()) code in
+	    add_word **> Word.def_user name code signature;
+	  ())
 	);
       
       def_bin_op_ret "<" IntType BoolType (fun () -> 
