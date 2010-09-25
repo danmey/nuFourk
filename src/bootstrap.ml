@@ -18,16 +18,16 @@ let init model =
     
   let app2f op () = app2 op push_float pop_float in
     
-  (* let lift1 f pop model = *)
-  (*   let a = pop () in *)
-  (*     f a *)
-  (* in *)
+  let lift1 f pop model =
+    let a = pop () in
+      f a
+  in
     
   (* let lift1i f model = lift1 f pop_int model in *)
 
   (* let lift1f f model = lift1 f pop_float model in *)
 
-  (* let lift1c f model = lift1 f pop_code model in *)
+  let lift1c f model = lift1 f pop_code model in
 
 (*    
   let tok f = 
@@ -124,6 +124,15 @@ let init model =
 		pop_value() in 
 		push_bool (v1 = v2));
 	  
+	  def_op "check" (([v 'A'] ---> [v 'B']) --> []) **> lift1c **>
+      	    (fun code ->
+      	      print_endline 
+	      **> Type.signature_to_string 
+	      **> (Type.signature_of_code 
+		     (Model.get_dict ()) code);
+      	      flush stdout;
+      	    );
+
 	  def_op "test2" (([v 'A'] ---> [v 'A']) --> ([v 'A'] ---> [v 'A'])) (fun () -> ());
 	  
 	  def_const "false" BoolType (Value.Bool false);
@@ -211,11 +220,6 @@ let init model =
       (* 	let dict = Model.get_dict () in *)
       (* 	  List.iter (fun (name, signature) -> Printf.printf "%s :: %s\n" name (Type.signature_to_string signature)) dict); *)
       
-      (* def "check" (sign [U.Term ("code", [U.Var "a";U.Var "b"])] []) **> lift1c **> *)
-      (* 	(fun code -> *)
-      (* 	  print_endline **> Type.signature_to_string **> (Type.signature_of_code (Model.get_dict ()) code); *)
-      (* 	  flush stdout; *)
-      (* 	); *)
       
       (* def "type" void_signature **> (fun () -> *)
       (* 	let name = match Lexer.next_token Model.model.Model.lexbuf with *)

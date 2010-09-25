@@ -53,6 +53,27 @@ let rec unified_type =
       (List.map unified_type lhs) 
       (List.map unified_type rhs)
 
+let unified_signature (a,b) =
+  List.map unified_type a, List.map unified_type b
+
+let rec normal_type =
+  function
+  | U.Term("bool", [], []) -> BoolType 
+  | U.Term("int", [], []) -> IntType 
+  | U.Term("float", [], []) -> FloatType 
+  | U.Term("string", [], []) -> StringType 
+  | U.Var name -> VarType name
+  | U.Term ("arrow", lhs, rhs) -> 
+    ArrowType (List.map normal_type lhs,
+	   List.map normal_type rhs)
+  | _ -> failwith (Printf.sprintf "Pattern match: `normal_type'")
+
+let unified_signature (a,b) =
+  List.map unified_type a, List.map unified_type b
+
+let normal_signature (a,b) =
+  List.map normal_type a, List.map normal_type b
+
 let type_error signature signature' =
   let str =
     Printf.sprintf "Expected type `%s', found `%s'!"
@@ -70,7 +91,7 @@ type stack_effect =
 let rec combine_with_effect =
   function
     | [], b -> Accepting b, []
-    | a, [] -> Leaving   a, []
+    | a, [] -> Leaving  a, []
     | a :: xs, b :: ys -> 
       let effect, result = combine_with_effect (xs, ys)
       in  
@@ -92,7 +113,8 @@ and code_to_signature dictionary =
 
 and check_code_type dictionary = IntType
 
-and check_signature_pair effect all first second  =
+and check_type_effect effect all first second  =
+
 
   let effect', combined_sign = 
     combine_with_effect (first, second) in
@@ -119,18 +141,83 @@ and check_signature_pair effect all first second  =
   (*     | Accepting a -> a  *)
   (* in *)
 
-  let ret = all', effect', combined_sign in
+  let first', second' = List.split combined_sign in
+  let first'', second'' = 
+    U.apply_all subst first', 
+    U.apply_all subst second' 
+  in
+  let ret = all', effect', (first'', second'') in
     match subst with
       | [] -> ret
       | _ when all = all' -> ret
       | _ -> 
-	let first', second' = List.split combined_sign in
-	let first'', second'' = 
-	  U.apply_all subst first', 
-	  U.apply_all subst second' 
-	in
-	  check_signature_pair effect' all' first'' second''
-    
+	check_type_effect effect' all' first'' second''    
+
+let null_effect = Accepting []
+
+let signature_of_code dict code =
+  let effect_singature =
+    function
+      | Leaving a   -> [], a
+      | Accepting a -> a, []
+  in
+
+  let check_pair all (l1, r1) (l2, r2) effect =
+    let all', effect', (l', r') = check_type_effect effect all r1 l2
+    in
+    let (l', r') = effect_singature effect' in
+      all', effect', (l1 @ l', r2 @ r') in
+
+    let rec pair_loop all effect previous = function
+    | current :: rest -> 
+      let all', effect', sign = check_pair all previous current effect in
+	pair_loop all' effect' sign rest
+    | [] -> all, previous
+    in
+
+  let signatures = List.map unified_signature (code_to_signature dict code) in
+  let _, sign = pair_loop signatures null_effect void_signature signatures in
+    normal_signature sign
+
+let rec type_to_string =
+  function
+  | BoolType -> "bool"
+  | IntType -> "int"
+  | FloatType -> "float"
+  | StringType -> "\"string\""
+  | VarType name -> Printf.sprintf "'%s" name
+  | ArrowType signature -> Printf.sprintf "(%s)" (signature_to_string signature)
+
+and signature_to_string (lhs,rhs) =
+  let concat_types types = 
+    String.concat " " (List.map type_to_string types) in
+  let lhs_types = concat_types lhs in
+  let rhs_types = concat_types rhs in
+    String.concat " -> " [ lhs_types; rhs_types ]
+
+    (* let to_signatures lst =  *)
+    (*   let prim_signature t = [], [t] in *)
+    (*   let rec loop acc lst = *)
+    (* 	let out = match lst with *)
+    (* 	| App::xs ->  *)
+    (* 	  loop ({  *)
+    (* 	    input = [U.Term ("code", [U.Term ("list", [U.Var "a"]); U.Term ("list", [U.Var "b"])])]; *)
+    (* 	    output = [U.Var "b"]} :: acc) xs *)
+    (*   | PushInt _ :: xs   -> (loop (prim_signature IntType)    :: acc) xs  *)
+    (*   | PushFloat _ ::xs  -> (loop (prim_signature FloatType)  :: acc) xs  *)
+    (*   | PushBool _ ::xs   -> (loop (prim_signature BoolType)   :: acc) xs  *)
+    (*   | PushString _ ::xs -> (loop (prim_signature StringType) :: acc) xs  *)
+    (*   | PushCode code::xs -> *)
+    (* 	let signature = signature_of_code dict code in *)
+    (* 	  loop ({ input = []; output = [U.Term ("code", [U.Term ("list", signature.input); U.Term ("list", signature.output)])] }::acc) xs *)
+    (*   | Call name::xs -> loop ((List.assoc name dict)::acc) xs  *)
+    (*   | [] -> acc *)
+    (* 	in *)
+    (* 	  sanitase out *)
+    (*   in *)
+    (* 	List.rev (loop [] lst) in *)
+      
+
 (*
 let rec check dictionary ((input, output) as current) =
   let rec apply_func =
