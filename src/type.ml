@@ -23,7 +23,7 @@ open BatPervasives
 open BatStd
 open BatList.Exceptionless
 
-type atype = 
+type atype = (* Basic type kinds defintions *)
   | BoolType 
   | IntType
   | FloatType
@@ -33,8 +33,6 @@ type atype =
 and signature = atype list * atype list
     
 let void_signature = ([], [])
-
-type annotation = opcode * signature
 
 type func = string * signature
 
@@ -131,19 +129,6 @@ and code_to_signature dictionary =
 and check_code_type dictionary = signature_of_code dictionary
 
 and check_type_effect effect all first second  =
-
-  let strip_effect =
-    function
-      | Leaving a -> a
-      | Accepting a -> a
-  in
-
-  let wrap_effect original a =
-    match original with
-      | Leaving _ -> Leaving a
-      | Accepting _ -> Accepting a
-  in
-
     
   let effect', combined_sign = 
     combine_with_effect (first, second) in
@@ -176,7 +161,6 @@ and check_type_effect effect all first second  =
       | _ when all = all' -> ret
       | _ -> 
 	check_type_effect effect' all' first'' second''    
-
 
 and signature_of_code dict code =
   let null_effect = Accepting [] in

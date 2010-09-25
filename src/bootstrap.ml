@@ -260,8 +260,8 @@ let init model =
       (* 	let signature2 = match word2.Word.code with | Word.Core (_, s) -> s | _ -> failwith "!!" in *)
       (* 	  print_endline **> signature_to_string (snd (Type.check_pair [] signature1 signature2)) *)
       (* ); *)
-    ] |> List.iter add_word;
-    Model.model
+    ] |> List.iter add_word
+
 
 let start() =
   init Model.model;
@@ -269,5 +269,6 @@ let start() =
     let token = Lexer.next_token Model.model.Model.lexbuf in
       Run.run token;
       loop ()
+
   in
     loop ()
