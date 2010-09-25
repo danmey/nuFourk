@@ -85,6 +85,8 @@ let rec string_of_type =
   | StringType -> "\"string\""
   | VarType name -> Printf.sprintf "'%s" name
   | ArrowType signature -> Printf.sprintf "(%s)" (string_of_signature signature)
+
+(* The same but for signatures *)
 and string_of_signature (lhs,rhs) =
   let concat_types types = 
     String.concat " " (List.map string_of_type types) in
@@ -118,9 +120,7 @@ let rec combine_with_effect =
       in  
 	effect, (a,b) :: result
 
-
-
-let rec opcode_to_signatures dictionary =
+let rec signature_of_opcode dictionary =
   let pi = prim_signature in
     function
       | PushBool _    -> pi BoolType
@@ -128,13 +128,11 @@ let rec opcode_to_signatures dictionary =
       | App           -> pi (ArrowType ([], []))
       | PushInt _     -> pi IntType
       | PushFloat _   -> pi FloatType
-      | PushCode code -> pi (ArrowType (check_code_type dictionary code))
+      | PushCode code -> pi (ArrowType (signature_of_code dictionary code))
       | Call name     -> List.assoc name dictionary
 
-and code_to_signature dictionary = 
-  List.map (opcode_to_signatures dictionary)
-
-and check_code_type dictionary = signature_of_code dictionary
+and code_signatures dictionary = 
+  List.map (signature_of_opcode dictionary)
 
 and check_type_effect effect all first second  =
     
@@ -191,7 +189,7 @@ and signature_of_code dict code =
     | [] -> all, previous
     in
 
-  let signatures = List.map unified_signature (code_to_signature dict code) in
+  let signatures = List.map unified_signature (code_signatures dict code) in
 
     let rec type_loop signatures =
       let signatures', sign = 
