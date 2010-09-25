@@ -63,6 +63,19 @@ let type_error signature signature' =
 
 let prim_signature pushed = [], [pushed]
 
+type stack_effect = 
+  | Accepting of U.t list
+  | Leaving of U.t list
+
+let rec combine_with_effect =
+  function
+    | [], b -> Accepting b, []
+    | a, [] -> Leaving   a, []
+    | a :: xs, b :: ys -> 
+      let effect, result = combine_with_effect (xs, ys)
+      in  
+	effect, (a,b) :: result
+
 let rec opcode_to_signatures dictionary =
   let pi = prim_signature in
     function
@@ -73,10 +86,51 @@ let rec opcode_to_signatures dictionary =
       | PushFloat _   -> pi FloatType
       | PushCode code -> pi (check_code_type code)
       | Call name     -> List.assoc name dictionary
+
 and code_to_signature dictionary = 
   List.map (opcode_to_signatures dictionary)
+
 and check_code_type dictionary = IntType
 
+and check_signature_pair effect all first second  =
+
+  let effect', combined_sign = 
+    combine_with_effect (first, second) in
+
+  let subst = List.fold_left (fun subst el -> subst @ U.unify el) [] combined_sign in
+
+  let subst_sig (a,b) =
+	U.apply_all subst a, U.apply_all subst b
+  in
+
+  let all' = List.map subst_sig all in
+
+  (* let rec combine_l x y = *)
+  (*   let rec loop = function *)
+  (*     | x :: xs,y :: ys -> (x,y) :: loop (xs,ys) *)
+  (*     | [], _ -> [] *)
+  (*     | _, [] -> [] *)
+  (*   in *)
+  (*     loop (x,y) in *)
+
+  (* let strip_effect =  *)
+  (*   function  *)
+  (*     | Leaving a -> a  *)
+  (*     | Accepting a -> a  *)
+  (* in *)
+
+  let ret = all', effect', combined_sign in
+    match subst with
+      | [] -> ret
+      | _ when all = all' -> ret
+      | _ -> 
+	let first', second' = List.split combined_sign in
+	let first'', second'' = 
+	  U.apply_all subst first', 
+	  U.apply_all subst second' 
+	in
+	  check_signature_pair effect' all' first'' second''
+    
 (*
 let rec check dictionary ((input, output) as current) =
   let rec apply_func =
