@@ -142,7 +142,10 @@ let init model =
       	      flush stdout;
       	    );
 
-	  def_op "test2" ([[v 'A'] ---> [v 'A']] --> [[v 'A'] ---> [v 'A']]) 
+	  def_op "test2" ([[v 'A'] ---> []] --> [[v 'A'] ---> []]) 
+	    ( fun () -> ());
+
+	  def_op "test3" ([v 'A'] --> [v 'A']) 
 	    ( fun () -> ());
 	  
 	  def_const "false" BoolType (Value.Bool false);

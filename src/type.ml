@@ -204,10 +204,9 @@ and signature_of_code dict code =
       | [] -> effect, all, previous
     in
 
-  let signatures = 
-    List.map unified_signature 
-      (code_signatures dict code) in
-
+    let type_signatures = code_signatures dict code in
+    let signatures = 
+      List.map unified_signature type_signatures in
 
     let rec fold_new_variables (idx, ass) = 
       function
@@ -260,8 +259,8 @@ and signature_of_code dict code =
 	(0,[])
     in
 
-    let rec type_loop signatures =
-      let effect, signatures', sign = 
+    let rec type_loop effect signatures =
+      let effect', signatures', sign = 
 	match signatures with
 	  | current :: rest -> pair_loop signatures null_effect void_signature signatures
  	  | [] -> null_effect, [], void_signature
@@ -269,10 +268,13 @@ and signature_of_code dict code =
 	if signatures = signatures' then
 	  signatures', sign
 	else
-	  type_loop signatures'
+	  type_loop effect' signatures'
     in
 
     let ending_normalize sign = 
       List.hd (snd (normalize_signature (0,[]) sign)) in
-    let _, sign = type_loop (rename signatures) in
+    (* let bigvar =  *)
+    (*   match type_signatures with *)
+    (* 	| (BigVarType nm :: _, _) :: _ -> Some nm *)
+    let _, sign = type_loop null_effect (rename signatures) in
       normal_signature (ending_normalize sign)
