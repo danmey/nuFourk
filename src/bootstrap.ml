@@ -1,4 +1,5 @@
 open BatPervasives
+open BatChar
 open Engine
 open Model
 open Unify
@@ -57,7 +58,14 @@ let init model =
   let def_bin_op_ret name typ ret body = adef name (sign [ typ; typ ] [ ret ]) body in
 
   let mk_var ch = VarType (string_of_char ch) in
-  let v a = VarType (string_of_char a) in
+  let v char =
+    let str = string_of_char char in
+    if is_uppercase char then 
+      BigVarType str 
+    else 
+      VarType str 
+  in
+
   let mk_vars = List.map mk_var in
   
   let def_poly_op name (consume, produce) = 

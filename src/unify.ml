@@ -28,7 +28,7 @@ let (<|>) f g = f g
 module U = struct
 
 type t =
-  | Var of string 
+  | Var of string
   | Term of string * t list * t list
 
 let rec vars = function
@@ -40,6 +40,8 @@ let prim name = Term (name, [], [])
 let var name = Var name
 
 let arrow lhs rhs = Term ("arrow", lhs, rhs)
+
+let kind lst = Term ("kind", lst, [])
 
 let rec occurs t n = mem n (vars t)
   

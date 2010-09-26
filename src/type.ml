@@ -21,6 +21,7 @@ open Code
 open BatList
 open BatPervasives
 open BatStd
+open BatChar
 open BatList.Exceptionless
 
 type atype =				(* Basic type kinds defintions  *)
@@ -29,6 +30,8 @@ type atype =				(* Basic type kinds defintions  *)
   | FloatType
   | StringType
   | VarType of string
+  | BigVarType of string
+  | KindType of atype list
   | ArrowType of signature
 and signature = atype list * atype list	(* Signature is pair of type kinds,
 					   consumed list of types and produced list or 
@@ -50,6 +53,8 @@ let rec unified_type =
   | FloatType -> U.prim "float"
   | StringType -> U.prim "string"
   | VarType name -> U.var name
+  | BigVarType name -> U.var name
+  | KindType lst -> U.kind (List.map unified_type lst)
   | ArrowType (lhs, rhs) -> 
     U.arrow 
       (List.map unified_type lhs) 
@@ -84,6 +89,8 @@ let rec string_of_type =
   | FloatType -> "float"
   | StringType -> "\"string\""
   | VarType name -> Printf.sprintf "'%s" name
+  | BigVarType name -> Printf.sprintf "'%s" (uppercase name)
+  | KindType lst -> Printf.sprintf "<%s>" **> String.concat " " (List.map string_of_type lst)
   | ArrowType signature -> Printf.sprintf "(%s)" (string_of_signature signature)
 
 (* The same but for signatures *)
@@ -194,7 +201,7 @@ and signature_of_code dict code =
       | current :: rest -> 
 	let all', effect', sign = check_pair all previous current effect in
 	  pair_loop all' effect' sign rest
-      | [] -> all, previous
+      | [] -> effect, all, previous
     in
 
   let signatures = 
@@ -202,41 +209,50 @@ and signature_of_code dict code =
       (code_signatures dict code) in
 
 
-    let rec fold_new_variables (char, ass) = 
-      let inc_char char = char_of_int ((int_of_char char) + 1) in
+    let rec fold_new_variables (idx, ass) = 
       function
-	| U.Var nm -> 
+	| U.Var nm ->
 	  (match BatList.Exceptionless.assoc nm ass with
-	    | Some _ -> char, ass
-	    | None -> inc_char char, (nm, char)::ass)
+	    | Some _ -> idx, ass
+	    | None -> idx+1, (nm, idx)::ass)
 	| U.Term (_, l, r) -> 
-	  let char, ass = 
+	  let idx, ass = 
 	    List.fold_left
-	      (fun (char, ass) el -> 
-		fold_new_variables (char, ass) el) (char, ass) l in
-	  let char', ass' = 
+	      (fun (idx, ass) el -> 
+		fold_new_variables (idx, ass) el) (idx, ass) l in
+	  let idx', ass' = 
 	    List.fold_left
-	      (fun (char, ass) el -> 
-		fold_new_variables (char, ass) el) (char, ass) r in
-	    char', ass @ ass'
+	      (fun (idx, ass) el -> 
+		fold_new_variables (idx, ass) el) (idx, ass) r in
+	    idx', ass @ ass'
       in
 	
     let rec replace_vars ass =
+      let achar nm =
+	let idx = (List.assoc nm ass) in
+	let char_base = 
+	  if BatChar.is_uppercase nm.[0] then 'A' else 'a' in
+	let final_char = int_of_char char_base + idx in
+	let str = string_of_char -| char_of_int in
+	    str final_char
+	in
       function
-    	| U.Var nm -> U.Var (string_of_char (List.assoc nm ass))
+    	| U.Var nm -> U.Var (achar nm)
     	| U.Term (nm, l,r)-> 
 	  U.Term (nm, 
 		  List.map (replace_vars ass) l, 
 		  List.map (replace_vars ass) r)
     in
 
-    let normalize_signature (char, lst) (l, r) = 
-      let char, vars = List.fold_left fold_new_variables (char,[]) (l @r ) in
-	char, lst @ [List.map (replace_vars vars) l, List.map (replace_vars vars) r]
+    let normalize_signature (idx, lst) (l, r) = 
+      let idx, vars = List.fold_left fold_new_variables (idx,[]) (l @r ) in
+	idx, lst @ [List.map (replace_vars vars) l, List.map (replace_vars vars) r]
     in
 
+(*
     let normalize_signatures lst = snd (List.fold_left normalize_signature ('a', []) lst)
     in
+*)
     let rename = 
       snd -| List.fold_left 
 	(fun (i, acc) (a, b) ->
@@ -245,12 +261,11 @@ and signature_of_code dict code =
     in
 
     let rec type_loop signatures =
-      let signatures', sign = 
+      let effect, signatures', sign = 
 	match signatures with
 	  | current :: rest -> pair_loop signatures null_effect void_signature signatures
- 	  | [] -> [], void_signature
+ 	  | [] -> null_effect, [], void_signature
       in
-
 	if signatures = signatures' then
 	  signatures', sign
 	else
@@ -258,6 +273,6 @@ and signature_of_code dict code =
     in
 
     let ending_normalize sign = 
-      List.hd (snd (normalize_signature ('a',[]) sign)) in
+      List.hd (snd (normalize_signature (0,[]) sign)) in
     let _, sign = type_loop (rename signatures) in
       normal_signature (ending_normalize sign)
