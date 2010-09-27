@@ -80,22 +80,22 @@ let rec to_string =
 let rec unify (a, b) = 
   (* Printf.printf "%s :: %s\n\n" (to_string a) (to_string b); *)
   match a,b with
-  | Var(n), t -> 
+    | Var(n), t -> 
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail (n,"OCCUR"))
 	else [n,t]
-  | t, Var(n) ->
+    | t, Var(n) ->
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail ("OCCUR",n))
 	else [n,t]
-  | Term(n1, l1, r1), Term(n2, l2, r2) ->
+    | Term(n1, l1, r1), Term(n2, l2, r2) ->
       if n1 <> n2 then raise (Unify_fail (n1,n2))
       else
 	let first = 
 	  fold_left 
 	    (fun s (t1',t2') -> 
 	      compose (unify ((apply s t1'), apply s t2')) s)
-	  [] (combine_l l1 l2) in
+	    [] (combine_l l1 l2) in
 	  fold_left 
 	    (fun s (t1',t2') -> 
 	      compose (unify ((apply s t1'), apply s t2')) s)

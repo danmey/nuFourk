@@ -34,8 +34,8 @@ type atype =				(* Basic type kinds defintions  *)
   | KindType of atype list
   | ArrowType of signature
 and signature = atype list * atype list	(* Signature is pair of type kinds,
-					   consumed list of types and produced list or 
-					   types*)
+					   consumed list of types and produced 
+					   list or types*)
 
 let void_signature = ([], [])
 
@@ -71,7 +71,8 @@ let rec normal_type =
   | U.Term("int", [], []) -> IntType 
   | U.Term("float", [], []) -> FloatType 
   | U.Term("string", [], []) -> StringType 
-  | U.Var name -> VarType name
+  | U.Var name -> if is_uppercase name.[0] then BigVarType name else VarType name
+  | U.Term ("kind", lst, []) -> KindType (List.map normal_type lst)
   | U.Term ("arrow", lhs, rhs) -> 
     ArrowType (List.map normal_type lhs,
 	   List.map normal_type rhs)
@@ -87,7 +88,7 @@ let rec string_of_type =
   | BoolType -> "bool"
   | IntType -> "int"
   | FloatType -> "float"
-  | StringType -> "\"string\""
+  | StringType -> "string"
   | VarType name -> Printf.sprintf "'%s" name
   | BigVarType name -> Printf.sprintf "'%s" (uppercase name)
   | KindType lst -> Printf.sprintf "<%s>" **> String.concat " " (List.map string_of_type lst)
@@ -95,8 +96,11 @@ let rec string_of_type =
 
 (* The same but for signatures *)
 and string_of_signature (lhs,rhs) =
-  let concat_types types = 
-    String.concat " " (List.map string_of_type types) in
+  let concat_types =
+    function
+      | [] -> "()"
+      | types ->    
+	String.concat " " (List.map string_of_type types) in
   let lhs_types = concat_types lhs in
   let rhs_types = concat_types rhs in
     String.concat " -> " [ lhs_types; rhs_types ]
@@ -167,7 +171,6 @@ and check_type_effect effect all first second  =
       | Accepting _ -> Accepting a
   in
 
-
   let all' = List.map subst_sig all in
 
   let first', second' = List.split combined_sign in
@@ -203,10 +206,6 @@ and signature_of_code dict code =
 	  pair_loop all' effect' sign rest
       | [] -> effect, all, previous
     in
-
-    let type_signatures = code_signatures dict code in
-    let signatures = 
-      List.map unified_signature type_signatures in
 
     let rec fold_new_variables (idx, ass) = 
       function
@@ -270,11 +269,40 @@ and signature_of_code dict code =
 	else
 	  type_loop effect' signatures'
     in
-
+      
+    
     let ending_normalize sign = 
       List.hd (snd (normalize_signature (0,[]) sign)) in
-    (* let bigvar =  *)
-    (*   match type_signatures with *)
-    (* 	| (BigVarType nm :: _, _) :: _ -> Some nm *)
-    let _, sign = type_loop null_effect (rename signatures) in
-      normal_signature (ending_normalize sign)
+
+
+    let rec to_kind_type lst =
+      let rec loop = 
+	function
+	  | ArrowType (l, r) -> ArrowType (big_var_check l, big_var_check r)
+	  | a -> a
+      and big_var_check = 
+	function
+	  | BigVarType nm :: xs -> [BigVarType nm] @ [KindType (List.map loop xs)]
+	  | xs -> List.map loop xs
+      in
+	List.map loop lst
+    in
+    let to_kind_type' = to_kind_type *** to_kind_type in
+    
+    let type_signatures = code_signatures dict code in
+
+    let signatures = 
+      List.map unified_signature type_signatures in
+
+    let signatures' = rename signatures in
+(*      
+    let signatures, sign = type_loop null_effect signatures' in
+    let signatures = List.map normal_signature signatures in
+    let type_signatures' = List.map to_kind_type' signatures in
+    let signatures' = 
+      List.map unified_signature type_signatures' in
+*)
+    let signatures, sign = type_loop null_effect signatures' in
+    let sign = normal_signature (ending_normalize sign) in
+      sign
+      
