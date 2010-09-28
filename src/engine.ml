@@ -93,118 +93,7 @@ module Dictionary = struct
   let lookup = find
   let add dict word = add dict word.Word.name word
 end
-    
-    
-(*and Types : sig
-   
-   type t = {
-   return    : U.t list;
-   arguments : U.t list;
-   }
-   
-   
-  (* val signature_of_code : Model.t -> Code.opcode list -> t *)
-  (* val signature_of_word : Model.t -> Word.t -> t *)
-   val print : t -> unit
-   
-   end = struct
-   
-   open Code
-   open BatList
-   
-   type t = {
-   return    : U.t list;
-   arguments : U.t list;
-   }
-   
-(*      
-   let rec signature_of_code model code =
-   let arguments = Stack.create() in
-   let stack = Stack.create() in
-   let normalize_arguments arg_types fun_arg_types =
-   let arg_types = (take **> List.length fun_arg_types) **> arg_types in
-   let arg_types =
-   if List.length arg_types != List.length fun_arg_types then
-   let cut_count = List.length fun_arg_types - List.length arg_types in
-   let cut_args = List.rev **> take cut_count **> List.rev fun_arg_types in
-   arg_types @ cut_args
-   else arg_types in
-   List.combine arg_types fun_arg_types
-   in
-   
-   let expect typ =
-   if Stack.is_empty stack then
-   Stack.push typ arguments
-   else
-   let _,typ' = Stack.pop stack in
-   try
-   ignore **> List.map U.unify (normalize_arguments typ' typ)
-   with _ ->
-   let l a = String.concat " " **> List.map U.to_string a in
-   raise (Error.Runtime_Type (Printf.sprintf "Expected type `%s', found `%s'!" (l typ) (l typ')))
-   in
-   
-   let fun_app_check arg_types fun_arg_types =
-   let arguments, _ = List.split arg_types in
-   let terms = normalize_arguments arguments fun_arg_types in
-   let check t =
-   try
-   ignore(List.map U.unify t)
-   with (U.Unify_fail (n1,n2)) ->
-   raise
-   (Error.Runtime_Type
-   (Printf.sprintf "AAA:Expected type `%s', found `%s'!" n2 n1))
-   in
-   check terms
-   in
-   
-   let st nm = [],[U.Term (nm, [])] in
-   
-   let to_list st = let ret = ref [] in Stack.iter (fun el -> ret := !ret@[el]) st; !ret in
-   
-   let stack_effects = function
-   | PushInt _ -> Stack.push (st "int") stack
-   | PushFloat _ -> Stack.push (st "float") stack
-   | Call name ->
-   let w = lookup_symbol model name in
-   let s = signature_of_word model w in
-   ()
-(*	      fun_app_check (to_list stack) s.arguments *)
-   | App ->
-   expect []
-   in
-   List.iter stack_effects code;
-   { arguments = []; return = [] }
-(*      { arguments = List.concat ( List.map snd (to_list arguments)); return = List.concat ( List.map snd (to_list stack)) } *)
-   
-   
-   and signature_of_word model word =
-   match word.Word.code with
-   | User code -> signature_of_code model code
-   | Core (nm,s) -> s
-*)
-   
-   let print {
-   return = return;
-   arguments = arguments } =
-   print_string "( ";
-   
-   for i = 0 to List.length arguments-1 do
-   print_string **> U.to_string **> List.nth arguments i;
-   print_string " ";
-   done;
-   u1
-   print_string "-> ";
-   
-   for i = 0 to List.length return-1 do
-   print_string **> U.to_string **> (List.nth return i);
-   print_string " ";
-   done;
-   
-   print_string ")";
-   
-   end
-*)
+
 module rec Model : sig
   
   type state =
@@ -336,7 +225,7 @@ end = struct
 end
 and Run : sig
   
-  val execute_word   : Model.t -> Word.t -> unit
+  val execute_word   : Word.t -> unit
   val execute_code   : Code.opcode list -> unit
   val execute_symbol : string -> unit
   val run            : Lexer.Token.t -> unit
@@ -345,9 +234,9 @@ end = struct
   
   open Lexer
     
-  let rec execute_word model word =
+  let rec execute_word word =
     match word.Word.code with
-    | Word.Core (f,_) -> f()
+    | Word.Core (f,_) -> f ()
     | Word.User (code,_) -> execute_code code
 	  
   and execute_code value =
@@ -363,8 +252,7 @@ end = struct
       
   and execute_symbol symbol =
     let w = Model.lookup_symbol symbol
-    in
-    execute_word Model.model w
+    in  execute_word w
       
   let run token =
     let top_er desc = Printf.printf "TOPLEVEL: %s\n" desc; flush stdout in

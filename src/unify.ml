@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 (*module S = struct*)
 
 open BatPervasives
+open BatChar
 
 open List
 
@@ -29,25 +30,25 @@ module U = struct
 
 type t =
   | Var of string
-  | Term of string * t list * t list
+  | Term of string * t list
 
 let rec vars = function
   | Var n' -> [n']
-  | Term (_,l,r) -> flatten (map vars l) @ flatten (map vars r)
+  | Term (_,l) -> flatten (map vars l)
 
-let prim name = Term (name, [], [])
+let prim name = Term (name, [])
 
 let var name = Var name
 
-let arrow lhs rhs = Term ("arrow", lhs, rhs)
+let arrow lhs rhs = Term ("arrow", [Term ("in", lhs); Term ("out", rhs)])
 
-let kind lst = Term ("kind", lst, [])
+let kind lst = Term ("kind", lst)
 
 let rec occurs t n = mem n (vars t)
   
 let rec apply s = function
   | Var n -> (try assoc n s with Not_found -> Var n)
-  | Term (n,l,r) -> Term (n, map (apply s) l, map (apply s) r)
+  | Term (n,l)-> Term (n, map (apply s) l)
 
 let i = ignore  
 
@@ -59,27 +60,34 @@ exception Unify_fail of string * string
 
 let rec rename i = function
   | Var n' -> Var (Printf.sprintf "%s%d" n' i) 
-  | Term (n,l,r) -> Term (n, List.map (rename i) l, List.map (rename i) r)
+  | Term (n,l) -> Term (n, List.map (rename i) l)
 
-  let rec combine_l x y =
+ let rec combine_l x y =
     let rec loop = function
-      | x :: xs,y :: ys -> (x,y) :: loop (xs,ys)
-      | [], _ -> []
-      | _, [] -> []
+      | x :: xs,y :: ys -> let lst, rest = loop (xs,ys) in ((x,y) :: lst), rest
+      | [], x -> [],x
+      | x, [] -> [],x
     in
       loop (x,y)
 
 let rec to_string = 
   function
-    | Term (nm, l, r ) ->
-	Printf.sprintf "(%s: %s -> %s)" nm 
+    | Term (nm, l) ->
+	Printf.sprintf "(%s: %s)" nm 
 	  (String.concat " "  (List.map to_string l))
-	  (String.concat " "  (List.map to_string r))
     | Var (nm) -> Printf.sprintf "%s'" nm
 
-let rec unify (a, b) = 
+let rec unify (a, b) rest = 
   (* Printf.printf "%s :: %s\n\n" (to_string a) (to_string b); *)
   match a,b with
+    | Var(n), t when is_uppercase (n.[0]) && rest != [] ->
+      if Var(n) = t then [] else
+	if occurs t n then raise (Unify_fail (n,"OCCUR"))
+	else [n,Term("kind", rest)]
+    | t, Var(n) when is_uppercase (n.[0]) && rest != [] ->
+      if Var(n) = t then [] else
+	if occurs t n then raise (Unify_fail (n,"OCCUR"))
+	else [n,Term("kind", rest)]
     | Var(n), t -> 
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail (n,"OCCUR"))
@@ -88,18 +96,15 @@ let rec unify (a, b) =
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail ("OCCUR",n))
 	else [n,t]
-    | Term(n1, l1, r1), Term(n2, l2, r2) ->
+
+    | Term(n1, l1), Term(n2, l2) ->
       if n1 <> n2 then raise (Unify_fail (n1,n2))
       else
-	let first = 
+	let combined, rest = (combine_l l1 l2) in
 	  fold_left 
 	    (fun s (t1',t2') -> 
-	      compose (unify ((apply s t1'), apply s t2')) s)
-	    [] (combine_l l1 l2) in
-	  fold_left 
-	    (fun s (t1',t2') -> 
-	      compose (unify ((apply s t1'), apply s t2')) s)
-	    first (combine_l r1 r2)
+	      compose (unify (apply s t1', apply s t2') rest) s)
+	    []  combined
 	
 
 open List

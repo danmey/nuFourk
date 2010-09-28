@@ -67,16 +67,16 @@ let unified_signature (a,b) =
 (* Convert back from unification data structures *)
 let rec normal_type =
   function
-  | U.Term("bool", [], []) -> BoolType 
-  | U.Term("int", [], []) -> IntType 
-  | U.Term("float", [], []) -> FloatType 
-  | U.Term("string", [], []) -> StringType 
-  | U.Var name -> if is_uppercase name.[0] then BigVarType name else VarType name
-  | U.Term ("kind", lst, []) -> KindType (List.map normal_type lst)
-  | U.Term ("arrow", lhs, rhs) -> 
-    ArrowType (List.map normal_type lhs,
-	   List.map normal_type rhs)
-  | _ -> failwith (Printf.sprintf "Pattern match: `normal_type'")
+    | U.Term("bool", []) -> BoolType 
+    | U.Term("int", []) -> IntType 
+    | U.Term("float", []) -> FloatType 
+    | U.Term("string", []) -> StringType 
+    | U.Var name -> if is_uppercase name.[0] then BigVarType name else VarType name
+    | U.Term ("kind", lst) -> KindType (List.map normal_type lst)
+    | U.Term ("arrow", [U.Term ("in", lhs); U.Term ("out", rhs)]) -> 
+      ArrowType (List.map normal_type lhs,
+		 List.map normal_type rhs)
+    | _ -> failwith (Printf.sprintf "Pattern match: `normal_type'")
 
 (* The same but for signatures *)
 let normal_signature (a,b) =
@@ -85,14 +85,14 @@ let normal_signature (a,b) =
 (* Convert type kind it to printable representation *)
 let rec string_of_type =
   function
-  | BoolType -> "bool"
-  | IntType -> "int"
-  | FloatType -> "float"
-  | StringType -> "string"
-  | VarType name -> Printf.sprintf "'%s" name
-  | BigVarType name -> Printf.sprintf "'%s" (uppercase name)
-  | KindType lst -> Printf.sprintf "<%s>" **> String.concat " " (List.map string_of_type lst)
-  | ArrowType signature -> Printf.sprintf "(%s)" (string_of_signature signature)
+    | BoolType -> "bool"
+    | IntType -> "int"
+    | FloatType -> "float"
+    | StringType -> "string"
+    | VarType name -> Printf.sprintf "'%s" name
+    | BigVarType name -> Printf.sprintf "'%s" (uppercase name)
+    | KindType lst -> Printf.sprintf "<%s>" **> String.concat " " (List.map string_of_type lst)
+    | ArrowType signature -> Printf.sprintf "(%s)" (string_of_signature signature)
 
 (* The same but for signatures *)
 and string_of_signature (lhs,rhs) =
@@ -153,9 +153,9 @@ and check_type_effect effect all first second  =
   let subst = 
     List.fold_left 
       (fun subst el -> 
-	subst @ U.unify el) 
+	subst @ U.unify el []) 
       [] combined_sign in
-
+    List.iter (fun (a, x) -> Printf.printf "%s :: %s" a (U.to_string x)) subst;
   let subst_sig (a,b) =
     U.apply_all subst a, U.apply_all subst b
   in
@@ -213,17 +213,10 @@ and signature_of_code dict code =
 	  (match BatList.Exceptionless.assoc nm ass with
 	    | Some _ -> idx, ass
 	    | None -> idx+1, (nm, idx)::ass)
-	| U.Term (_, l, r) -> 
-	  let idx, ass = 
+	| U.Term (_, l) -> 
 	    List.fold_left
 	      (fun (idx, ass) el -> 
 		fold_new_variables (idx, ass) el) (idx, ass) l in
-	  let idx', ass' = 
-	    List.fold_left
-	      (fun (idx, ass) el -> 
-		fold_new_variables (idx, ass) el) (idx, ass) r in
-	    idx', ass @ ass'
-      in
 	
     let rec replace_vars ass =
       let achar nm =
@@ -236,10 +229,9 @@ and signature_of_code dict code =
 	in
       function
     	| U.Var nm -> U.Var (achar nm)
-    	| U.Term (nm, l,r)-> 
+    	| U.Term (nm, l)-> 
 	  U.Term (nm, 
-		  List.map (replace_vars ass) l, 
-		  List.map (replace_vars ass) r)
+		  List.map (replace_vars ass) l)
     in
 
     let normalize_signature (idx, lst) (l, r) = 
