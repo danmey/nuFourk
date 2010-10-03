@@ -142,7 +142,7 @@ let init model =
       	      flush stdout;
       	    );
 
-	  def_op "test2" ([[] ---> [v 'A'] ] --> [[] ---> [v 'A']]) 
+	  def_op "test2" ([[v 'B'] ---> [v 'A'];[v 'B'] ---> [v 'A']  ] --> [[ v 'A'] ---> [v 'B']]) 
 	    ( fun () -> ());
 
 	  def_op "test3" ([v 'A'] --> [v 'A']) 

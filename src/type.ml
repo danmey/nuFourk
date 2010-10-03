@@ -89,8 +89,8 @@ let rec string_of_type =
     | IntType -> "int"
     | FloatType -> "float"
     | StringType -> "string"
-    | VarType name -> Printf.sprintf "'%s" name
-    | BigVarType name -> Printf.sprintf "'%s" (uppercase name)
+    | VarType name -> Printf.sprintf "%s" name
+    | BigVarType name -> Printf.sprintf "%s" (uppercase name)
     | KindType lst -> Printf.sprintf "<%s>" **> String.concat " " (List.map string_of_type lst)
     | ArrowType signature -> Printf.sprintf "(%s)" (string_of_signature signature)
 
@@ -153,11 +153,23 @@ and check_type_effect effect all first second  =
   let subst = 
     List.fold_left 
       (fun subst el -> 
-	subst @ U.unify el []) 
+	subst @ U.unify el) 
       [] combined_sign in
-    List.iter (fun (a, x) -> Printf.printf "%s :: %s" a (U.to_string x)) subst;
-  let subst_sig (a,b) =
-    U.apply_all subst a, U.apply_all subst b
+    
+  let rec loop = function
+    | (nm,v)::xs -> 
+      let v2 = 
+	try 
+	  List.assoc nm xs 
+	with 
+	    Not_found -> loop xs
+      in 
+	ignore(U.unify (v,v2)); loop xs
+    | [] -> U.Var "a"  
+  in
+    loop subst;
+    let subst_sig (a,b) =
+      U.apply_all subst a, U.apply_all subst b
   in
  let strip_effect =
     function
@@ -179,7 +191,7 @@ and check_type_effect effect all first second  =
     U.apply_all subst second',
     wrap_effect effect' (U.apply_all subst (strip_effect effect'))
   in
-  let ret = all', effect'', (first'', second'') in
+  let ret = all', effect'', (first'', second''), subst in
     match subst with
       | [] -> ret
       | _ when all = all' -> ret
@@ -195,16 +207,16 @@ and signature_of_code dict code =
   in
 
   let check_pair all (l1, r1) (l2, r2) effect =
-    let all', effect', (l', r') = check_type_effect effect all r1 l2
+    let all', effect', (l', r'), subst = check_type_effect effect all r1 l2
     in
     let (l', r') = effect_singature effect' in
-      all', effect', (l1 @ l', r2 @ r') in
+      all', effect', (l1 @ l', r2 @ r'), subst in
 
-    let rec pair_loop all effect previous = function
+    let rec pair_loop subst all effect previous = function
       | current :: rest -> 
-	let all', effect', sign = check_pair all previous current effect in
-	  pair_loop all' effect' sign rest
-      | [] -> effect, all, previous
+	let all', effect', sign, subst = check_pair all previous current effect in
+	  pair_loop subst all' effect' sign rest
+      | [] -> effect, all, previous, subst
     in
 
     let rec fold_new_variables (idx, ass) = 
@@ -250,16 +262,16 @@ and signature_of_code dict code =
 	(0,[])
     in
 
-    let rec type_loop effect signatures =
-      let effect', signatures', sign = 
+    let rec type_loop subst effect signatures =
+      let effect', signatures', sign,subst = 
 	match signatures with
-	  | current :: rest -> pair_loop signatures null_effect void_signature signatures
- 	  | [] -> null_effect, [], void_signature
+	  | current :: rest -> pair_loop [] signatures null_effect void_signature signatures
+ 	  | [] -> null_effect, [], void_signature, subst
       in
 	if signatures = signatures' then
-	  signatures', sign
+	  signatures', sign, subst
 	else
-	  type_loop effect' signatures'
+	  type_loop subst effect' signatures'
     in
       
     
@@ -294,7 +306,40 @@ and signature_of_code dict code =
     let signatures' = 
       List.map unified_signature type_signatures' in
 *)
-    let signatures, sign = type_loop null_effect signatures' in
+    let rec remove_kind = function
+      | U.Term (nm, [U.Term ("kind", lst)]) -> U.Term (nm, List.map remove_kind lst)
+      | a -> a
+    in
+    let remove_kind_top = function
+      | U.Term ("kind", lst) -> lst
+      | a -> [a] in
+    let signatures, sign,subst = type_loop [] null_effect signatures' in
+    let signatures = List.map (fun (a,b) -> List.map remove_kind a, List.map remove_kind b) signatures in
+    let a, b = sign in
+      (* Printf.printf "\n\n%s ---> %s\n\n" (String.concat "->" (List.map U.to_string a)) (String.concat "->" (List.map U.to_string b)); *)
+    let rec rename_v = function
+      | U.Term (a, lst) -> U.Term (a, List.map rename_v lst)
+      | U.Var(a) ->
+    	if is_uppercase a.[0] then U.Var("t" ^ a)
+    	else U.Var(a)
+    in
+    let subst_u = List.map (fun (nm, s) ->
+      let nm =
+    	if is_uppercase nm.[0] then
+    	  "t" ^ nm
+    	else nm
+      in
+    	nm, s) in
+     let sign = List.map rename_v a, List.map rename_v b in 
+     let subst_sig (a,b) =
+      (* U.apply_all (subst_u subst) (List.map rename_v a), U.apply_all (subst_u subst) (List.map rename_v b) *)
+      U.apply_all subst a, U.apply_all subst b
+    in
+    let sign = subst_sig sign in
+    let a,b = sign in
+    let sign = List.map remove_kind a, List.map remove_kind b in
+    let sign = List.concat (List.map remove_kind_top a), List.concat (List.map remove_kind_top b)
+    in
     let sign = normal_signature (ending_normalize sign) in
       sign
       

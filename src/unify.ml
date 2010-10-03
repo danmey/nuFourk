@@ -77,17 +77,46 @@ let rec to_string =
 	  (String.concat " "  (List.map to_string l))
     | Var (nm) -> Printf.sprintf "%s'" nm
 
-let rec unify (a, b) rest = 
-  (* Printf.printf "%s :: %s\n\n" (to_string a) (to_string b); *)
+let rec pre_unify (a, b) = 
   match a,b with
-    | Var(n), t when is_uppercase (n.[0]) && rest != [] ->
-      if Var(n) = t then [] else
-	if occurs t n then raise (Unify_fail (n,"OCCUR"))
-	else [n,Term("kind", rest)]
-    | t, Var(n) when is_uppercase (n.[0]) && rest != [] ->
-      if Var(n) = t then [] else
-	if occurs t n then raise (Unify_fail (n,"OCCUR"))
-	else [n,Term("kind", rest)]
+    | Term(n1, Var(a)::l1), Term(n2, l2) when
+	is_uppercase (a.[0])
+	->
+	  let l1 = List.rev l1 in
+	  let l2 = List.rev l2 in
+	  let combined, rest = (combine_l l1 l2) in
+	  let combined = List.rev combined in
+	  let rest = List.rev rest in
+	  let combined = List.map pre_unify combined in
+	  let l1, l2 = List.split combined in
+	    Term(n1, Var("t" ^ a)::l1), Term(n2, Term ("kind", rest)::l2)
+
+    |  Term(n1, l1), Term(n2, Var(a)::l2) when
+	is_uppercase (a.[0])
+	->
+	  let l1 = List.rev l1 in
+	  let l2 = List.rev l2 in
+	  let combined, rest = (combine_l l1 l2) in
+	  let combined = List.rev combined in
+	  let rest = List.rev rest in
+	  let combined = List.map pre_unify combined in
+	  let l1, l2 = List.split combined in
+	    Term(n1, Term ("kind", rest)::l1), Term(n2, Var("t" ^ a)::l2)
+
+    | Term(n1,l1),Term(n2,l2) ->
+      (* Printf.printf "\n\npre_unify: %s --> %s\n\n" (to_string a) (to_string b); *)
+      let combined =  try combine l1 l2 with | _ -> raise (Unify_fail ("Awrong arity", "")) in
+      let combined = List.map pre_unify combined in
+      let l1, l2 = List.split combined in
+    	Term(n1, l1), Term(n2, l2)
+
+    | a, b -> a, b
+
+let rec unify (a, b) = 
+  let a,b = pre_unify (a,b) in
+    
+   (* Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b); *)
+  match a,b with
     | Var(n), t -> 
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail (n,"OCCUR"))
@@ -100,10 +129,10 @@ let rec unify (a, b) rest =
     | Term(n1, l1), Term(n2, l2) ->
       if n1 <> n2 then raise (Unify_fail (n1,n2))
       else
-	let combined, rest = (combine_l l1 l2) in
+	let combined = try combine l1 l2 with | _ -> raise (Unify_fail ("Bwrong arity", "")) in
 	  fold_left 
 	    (fun s (t1',t2') -> 
-	      compose (unify (apply s t1', apply s t2') rest) s)
+	      compose (unify (apply s t1', apply s t2')) s)
 	    []  combined
 	
 
