@@ -195,7 +195,7 @@ let init model =
 	  push_bool (i1 < i2));
       
       def_op "?" ([[v 'A'] ---> [v 'B'];
-		  [v 'A'] ---> [v 'B']; BoolType;] --> [v 'B'])
+		  [v 'A'] ---> [v 'B']; BoolType;v 'A'] --> [v 'B'])
       	(fun () ->
       	  let b1 = pop_code() in
       	  let b2 = pop_code() in
@@ -205,22 +205,22 @@ let init model =
       	    else
       	      Run.execute_code b2);
 
-      (* def "loop"  *)
-      (*  	(fun () -> *)
-      (*  	  let cond_code = pop_code () in *)
-      (*  	  let body = pop_code() in *)
-      (*  	  let rec loop () = *)
-      (*  	    Run.execute_code cond_code; *)
-      (*  	    let cond = pop_bool () in *)
-      (* 	      if cond then *)
-      (*  		begin *)
-      (*  		  Run.execute_code body; *)
-      (*  		  loop() *)
-      (*  		end *)
-      (*  	      else *)
-      (* 		() *)
-      (*  	  in *)
-      (*  	    loop ()); *)
+      def "loop" ([[v 'A'] ---> [BoolType;v 'A'];[v 'A'] ---> [v 'A'];  ] --> [v 'A']) 
+       	(fun () ->
+       	  let cond_code = pop_code () in
+       	  let body = pop_code() in
+       	  let rec loop () =
+       	    Run.execute_code cond_code;
+       	    let cond = pop_bool () in
+      	      if cond then
+       		begin
+       		  Run.execute_code body;
+       		  loop()
+       		end
+       	      else
+      		()
+       	  in
+       	    loop ());
       
 
       def "b." (sign [BoolType] [])

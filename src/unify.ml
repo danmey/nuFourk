@@ -105,6 +105,7 @@ let rec pre_unify (a, b) =
 
     | Term(n1,l1),Term(n2,l2) ->
       (* Printf.printf "\n\npre_unify: %s --> %s\n\n" (to_string a) (to_string b); *)
+      Printf.printf "\n\npre_unify: %s ---> %s\n\n" (to_string a) (to_string b);
       let combined =  try combine l1 l2 with | _ -> raise (Unify_fail ("Awrong arity", "")) in
       let combined = List.map pre_unify combined in
       let l1, l2 = List.split combined in
