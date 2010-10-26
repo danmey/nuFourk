@@ -46,7 +46,7 @@ type dictionary = func list
 exception Type_error of string
 
 (* Convert to internal representation for unification algorithm *)
-let rec unified_type = 	
+let rec unified_type =
   function
   | BoolType -> U.prim "bool"
   | IntType -> U.prim "int"

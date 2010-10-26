@@ -142,6 +142,21 @@ let init model =
       	      flush stdout;
       	    );
 
+	  def_op "dump" ([[v 'A'] ---> [v 'B']] --> []) 
+	  **> lift1c
+      	    (fun code ->
+              (fun (a,b) -> 
+                List.iter 
+                  (fun a -> 
+                    print_endline (U.to_string a)) a;
+                List.iter (fun b -> 
+                  print_endline (U.to_string b)) b)
+	      **> unified_signature
+	      **> (Type.signature_of_code 
+		     (Model.get_dict ()) code);
+      	      flush stdout;
+      	    );
+
 	  def_op "test2" ([[v 'B'] ---> [v 'A'];[v 'B'] ---> [v 'A']  ] --> [[ v 'A'] ---> [v 'B']]) 
 	    ( fun () -> ());
 
