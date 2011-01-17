@@ -162,6 +162,12 @@ let init model =
 
 	  def_op "test3" ([v 'A'] --> [v 'A']) 
 	    ( fun () -> ());
+
+	  def_op "test5" ([[] ---> [v 'A';IntType]; []---> [v 'A';IntType]] --> [IntType]) 
+	    ( fun () -> ());
+
+          def_op "test6" ([[v 'A'] ---> [v 'B'];v 'A'] --> [v 'B'])
+      	    (fun () ->());
 	  
 	  def_const "false" BoolType (Value.Bool false);
 
@@ -197,20 +203,20 @@ let init model =
 		      **> Code.PushCode l)) 
 		**> List.rev code);
       
-            macro ":"  void_signature
-	(tok1 (fun model name ->
-	  let code = pop_code model in
-	  let signature = Type.signature_of_code (Model.get_dict ()) code in
-	    add_word **> Word.def_user name code signature;
-	  ())
-	);
+          macro ":"  void_signature
+	    (tok1 (fun model name ->
+	      let code = pop_code model in
+	      let signature = Type.signature_of_code (Model.get_dict ()) code in
+	      add_word **> Word.def_user name code signature;
+	      ())
+	    );
       
       def_bin_op_ret "<" IntType BoolType (fun () -> 
 	let i1, i2 = pop_int(), pop_int() in 
 	  push_bool (i1 < i2));
       
       def_op "?" ([[v 'A'] ---> [v 'B'];
-		  [v 'A'] ---> [v 'B']; BoolType;v 'A'] --> [v 'B'])
+		  [v 'A'] ---> [v 'B'];v 'A'] --> [v 'B';])
       	(fun () ->
       	  let b1 = pop_code() in
       	  let b2 = pop_code() in

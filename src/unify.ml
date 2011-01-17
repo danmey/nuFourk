@@ -77,8 +77,70 @@ let rec to_string =
 	  (String.concat " "  (List.map to_string l))
     | Var (nm) -> Printf.sprintf "%s'" nm
 
-let rec pre_unify (a, b) = 
+(* let rec pre_unify (a, b) =  *)
+(*   match a,b with *)
+(*     | Term(n1, Var(a)::l1), Term(n2, l2) when *)
+(* 	is_uppercase (a.[0]) *)
+(* 	-> *)
+(* 	  let l1 = List.rev l1 in *)
+(* 	  let l2 = List.rev l2 in *)
+(* 	  let combined, rest = (combine_l l1 l2) in *)
+(* 	  let combined = List.rev combined in *)
+(* 	  let rest = List.rev rest in *)
+(* 	  let combined = List.map pre_unify combined in *)
+(* 	  let l1, l2 = List.split combined in *)
+(* 	    Term(n1, Var(a)::l1), Term(n2, Term ("kind", rest)::l2) *)
+
+(*     |  Term(n1, l1), Term(n2, Var(a)::l2) when *)
+(* 	is_uppercase (a.[0]) *)
+(* 	-> *)
+(* 	  let l1 = List.rev l1 in *)
+(* 	  let l2 = List.rev l2 in *)
+(* 	  let combined, rest = (combine_l l1 l2) in *)
+(* 	  let combined = List.rev combined in *)
+(* 	  let rest = List.rev rest in *)
+(* 	  let combined = List.map pre_unify combined in *)
+(* 	  let l1, l2 = List.split combined in *)
+(* 	    Term(n1, Term ("kind", rest)::l1), Term(n2, Var(a)::l2) *)
+
+(*     | Term(n1,l1),Term(n2,l2) -> *)
+(*       (\* Printf.printf "\n\npre_unify: %s --> %s\n\n" (to_string a) (to_string b); *\) *)
+(*       Printf.printf "\n\npre_unify: %s ---> %s\n\n" (to_string a) (to_string b); *)
+(*       let combined =  try combine l1 l2 with | _ -> raise (Unify_fail ("Awrong arity", "")) in *)
+(*       let combined = List.map pre_unify combined in *)
+(*       let l1, l2 = List.split combined in *)
+(*     	Term(n1, l1), Term(n2, l2) *)
+
+    (* | a, b -> a, b *)
+    let rec remove_kind = function
+      | Term (nm, [Term ("kind", lst)]) -> Term (nm, List.map remove_kind lst)
+      | a -> a
+
+let rec unify (a, b) = 
+  (* let a,b = pre_unify (a,b) in *)
+  print_endline "--------------------";
+   Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b);
+   let a,b = remove_kind a, remove_kind b in
+  
+   Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b);
+   (* let a, b = match a, b with  *)
+   (*   | Term ("kind", lst), a -> Term ("kind", lst), Term ("kind", [a]) *)
+   (*   | a, Term ("kind", lst) -> Term ("kind", [a]), Term ("kind", lst) *)
+   (*   | el -> el *)
+   (* in *)
+   (* Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b);  *)
   match a,b with
+    | Term ("kind", ((a::_) as l)), ((Term (n2, [])) as b)  ->
+      unify (a, b) @ ["left", Term("kind", l);"right", Term("kind", [Term(n2,[])])]
+    |  Term (n2, []),Term("kind", l1)  ->
+      ["right", Term("kind", l1);"left", Term("kind", [Term(n2,[])])]
+
+    | Term ("in", a), ((Term ("in", [])) as b)  ->
+      ["left", Term("kind", a);]
+
+    | ((Term ("in", [])) as b),Term ("in", a)  ->
+      ["right", Term("kind", a);]
+
     | Term(n1, Var(a)::l1), Term(n2, l2) when
 	is_uppercase (a.[0])
 	->
@@ -87,9 +149,11 @@ let rec pre_unify (a, b) =
 	  let combined, rest = (combine_l l1 l2) in
 	  let combined = List.rev combined in
 	  let rest = List.rev rest in
-	  let combined = List.map pre_unify combined in
-	  let l1, l2 = List.split combined in
-	    Term(n1, Var("t" ^ a)::l1), Term(n2, Term ("kind", rest)::l2)
+	  let result = List.concat (List.map unify combined) in
+	  if rest <> [] then [a, Term ("kind", rest)] else [] @ fold_left 
+	    (fun s (t1',t2') -> 
+	      compose (unify (apply s t1', apply s t2')) s)
+	    [] combined @ result
 
     |  Term(n1, l1), Term(n2, Var(a)::l2) when
 	is_uppercase (a.[0])
@@ -99,25 +163,13 @@ let rec pre_unify (a, b) =
 	  let combined, rest = (combine_l l1 l2) in
 	  let combined = List.rev combined in
 	  let rest = List.rev rest in
-	  let combined = List.map pre_unify combined in
-	  let l1, l2 = List.split combined in
-	    Term(n1, Term ("kind", rest)::l1), Term(n2, Var("t" ^ a)::l2)
+	  let result = List.concat (List.map unify combined) in
+	  if rest <> [] then [a, Term ("kind", rest)] else [] @ 
+            fold_left 
+	    (fun s (t1',t2') -> 
+	      compose (unify (apply s t1', apply s t2')) s)
+	    [] combined @ result
 
-    | Term(n1,l1),Term(n2,l2) ->
-      (* Printf.printf "\n\npre_unify: %s --> %s\n\n" (to_string a) (to_string b); *)
-      Printf.printf "\n\npre_unify: %s ---> %s\n\n" (to_string a) (to_string b);
-      let combined =  try combine l1 l2 with | _ -> raise (Unify_fail ("Awrong arity", "")) in
-      let combined = List.map pre_unify combined in
-      let l1, l2 = List.split combined in
-    	Term(n1, l1), Term(n2, l2)
-
-    | a, b -> a, b
-
-let rec unify (a, b) = 
-  let a,b = pre_unify (a,b) in
-    
-   (* Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b); *)
-  match a,b with
     | Var(n), t -> 
       if Var(n) = t then [] else
 	if occurs t n then raise (Unify_fail (n,"OCCUR"))

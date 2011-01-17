@@ -53,7 +53,7 @@ let rec unified_type =
   | FloatType -> U.prim "float"
   | StringType -> U.prim "string"
   | VarType name -> U.var name
-  | BigVarType name -> U.var name
+  | BigVarType name -> U.var (uppercase name)
   | KindType lst -> U.kind (List.map unified_type lst)
   | ArrowType (lhs, rhs) -> 
     U.arrow 
@@ -71,7 +71,7 @@ let rec normal_type =
     | U.Term("int", []) -> IntType 
     | U.Term("float", []) -> FloatType 
     | U.Term("string", []) -> StringType 
-    | U.Var name -> if is_uppercase name.[0] then BigVarType name else VarType name
+    | U.Var name -> print_endline name;if is_uppercase name.[0] then BigVarType name else VarType name
     | U.Term ("kind", lst) -> KindType (List.map normal_type lst)
     | U.Term ("arrow", [U.Term ("in", lhs); U.Term ("out", rhs)]) -> 
       ArrowType (List.map normal_type lhs,
@@ -149,13 +149,67 @@ and check_type_effect effect all first second  =
     
   let effect', combined_sign = 
     combine_with_effect (first, second) in
-
-  let subst = 
-    List.fold_left 
-      (fun subst el -> 
-	subst @ U.unify el) 
-      [] combined_sign in
-    
+  let merge_effect = function
+    | Accepting a, Leaving b ->
+      let rec loop = function
+        | x::xs, y::ys -> loop (xs,ys)
+        | [], ys -> Leaving ys
+        | xs, [] -> Accepting xs
+        | [], [] -> Accepting [] in
+      loop (a,b)
+    | Leaving a, Accepting b ->
+      let rec loop = function
+        | x::xs, y::ys -> loop (xs,ys)
+        | [], ys -> Accepting ys
+        | xs, [] -> Leaving xs
+        | [], [] -> Accepting [] 
+      in
+      loop (a,b)
+    | Accepting a, Accepting b -> Accepting (a@b)
+    | Leaving a, Leaving b -> Leaving (a@b)
+  in
+  
+  let rec loop_unif effect subst = function
+    | [],[] -> 
+      let subst, effect = 
+        (try
+           let l = List.assoc "left" subst in
+           subst, merge_effect (effect, Accepting [l])
+      with Not_found -> subst, effect) in
+      let subst, effect = 
+        (try
+           let l = List.assoc "right" subst in
+           subst, merge_effect (effect, Leaving [l])
+      with Not_found -> subst, effect) in
+      subst, effect
+    | el::xs,y::ys  ->
+      (* print_endline "ala"; *)
+      (match el with
+        (* | U.Term("kind", lst) -> *)
+        (*   (\* List.iter (print_endline -| U.to_string) lst; *\) *)
+        (*   let n = List.length lst - 1 in *)
+        (*   let newlst = el :: take n ys in *)
+        (*   let effect =  *)
+        (*     if List.length newlst < List.length lst then *)
+        (*       Accepting (drop (List.length newlst) lst) *)
+        (*     else Accepting [] in *)
+        (*   let zipped = List.combine newlst lst in *)
+        (*   let subst = List.fold_left *)
+        (*     (fun subst el -> *)
+        (*       subst @ U.unify el) subst zipped in *)
+        (*   loop_unif effect subst ([],[]) *)
+        | _ -> loop_unif effect (subst @ U.unify (el,y)) (xs,ys))
+  in
+  (* let subst =  *)
+  (*   List.fold_left  *)
+  (*     (fun subst el ->  *)
+  (*       print_endline "**************"; *)
+  (*       match el with *)
+  (*         | Term("kind", lst) -> *)
+  (*       subst @ U.unify el)  *)
+  (*     [] combined_sign in *)
+  let subst, effect2 = loop_unif (Accepting []) [] (List.split combined_sign) in
+  let effect' = merge_effect (effect', effect2) in
   let rec loop = function
     | (nm,v)::xs -> 
       let v2 = 
@@ -234,6 +288,8 @@ and signature_of_code dict code =
       let achar nm =
 	let idx = (List.assoc nm ass) in
 	let char_base = 
+          print_endline nm;
+          flush stdout;
 	  if BatChar.is_uppercase nm.[0] then 'A' else 'a' in
 	let final_char = int_of_char char_base + idx in
 	let str = string_of_char -| char_of_int in
@@ -317,20 +373,6 @@ and signature_of_code dict code =
     let signatures = List.map (fun (a,b) -> List.map remove_kind a, List.map remove_kind b) signatures in
     let a, b = sign in
       (* Printf.printf "\n\n%s ---> %s\n\n" (String.concat "->" (List.map U.to_string a)) (String.concat "->" (List.map U.to_string b)); *)
-    let rec rename_v = function
-      | U.Term (a, lst) -> U.Term (a, List.map rename_v lst)
-      | U.Var(a) ->
-    	if is_uppercase a.[0] then U.Var("t" ^ a)
-    	else U.Var(a)
-    in
-    let subst_u = List.map (fun (nm, s) ->
-      let nm =
-    	if is_uppercase nm.[0] then
-    	  "t" ^ nm
-    	else nm
-      in
-    	nm, s) in
-     let sign = List.map rename_v a, List.map rename_v b in 
      let subst_sig (a,b) =
       (* U.apply_all (subst_u subst) (List.map rename_v a), U.apply_all (subst_u subst) (List.map rename_v b) *)
       U.apply_all subst a, U.apply_all subst b
