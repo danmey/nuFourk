@@ -130,10 +130,11 @@ let rec unify (a, b) =
    (* in *)
    (* Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b);  *)
   match a,b with
-    | Term ("kind", ((a::_) as l)), ((Term (n2, [])) as b)  ->
-      unify (a, b) @ ["left", Term("kind", l);"right", Term("kind", [Term(n2,[])])]
-    |  Term (n2, []),Term("kind", l1)  ->
-      ["right", Term("kind", l1);"left", Term("kind", [Term(n2,[])])]
+    | Term ("kind", ((a::lr) as l)), ((Term (n2, [])) as b)  ->
+      unify (a, b) @ ["left", Term("kind", lr);"right", Term("kind", [Term(n2,[])])]
+
+    |  ((Term (n2, [])) as a), Term("kind", ((b::lr) as l))  ->
+      unify (a, b) @ ["right", Term("kind", lr); "left", Term("kind", [Term(n2,[])])]
 
     | Term ("in", a), ((Term ("in", [])) as b)  ->
       ["left", Term("kind", a);]

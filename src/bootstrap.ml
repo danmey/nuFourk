@@ -216,7 +216,7 @@ let init model =
 	  push_bool (i1 < i2));
       
       def_op "?" ([[v 'A'] ---> [v 'B'];
-		  [v 'A'] ---> [v 'B'];v 'A'] --> [v 'B';])
+		  [v 'A'] ---> [v 'B'];BoolType; v 'A'] --> [v 'B';])
       	(fun () ->
       	  let b1 = pop_code() in
       	  let b2 = pop_code() in

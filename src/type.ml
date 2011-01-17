@@ -176,11 +176,11 @@ and check_type_effect effect all first second  =
            let l = List.assoc "left" subst in
            subst, merge_effect (effect, Accepting [l])
       with Not_found -> subst, effect) in
-      let subst, effect = 
-        (try
-           let l = List.assoc "right" subst in
-           subst, merge_effect (effect, Leaving [l])
-      with Not_found -> subst, effect) in
+      (* let subst, effect =  *)
+      (*   (try *)
+      (*      let l = List.assoc "right" subst in *)
+      (*      subst, merge_effect (effect, Leaving [l]) *)
+      (* with Not_found -> subst, effect) in *)
       subst, effect
     | el::xs,y::ys  ->
       (* print_endline "ala"; *)
