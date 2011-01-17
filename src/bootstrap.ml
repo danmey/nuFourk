@@ -157,6 +157,9 @@ let init model =
       	      flush stdout;
       	    );
 
+	  def_op "$" ([[v 'A'] ---> [v 'B']; v 'A'] --> [v 'B']) **>
+            (fun () -> Run.execute_code (pop_code ()));
+
 	  def_op "test2" ([[v 'B'] ---> [v 'A'];[v 'B'] ---> [v 'A']  ] --> [[ v 'A'] ---> [v 'B']]) 
 	    ( fun () -> ());
 

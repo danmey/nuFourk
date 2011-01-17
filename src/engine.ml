@@ -265,14 +265,14 @@ end = struct
 	    | Token.Integer value -> Model.push_int value;()
 	    | Token.Float value -> Model.push_float value;()
 	    | Token.String value -> Model.push_string value;()
-	    | Token.Word "$" -> let code = Model.pop_code() in execute_code code
+	    (* | Token.Word "$" -> let code = Model.pop_code() in execute_code code *)
 	    | Token.Word name -> execute_symbol name)
 	| Model.Compiling ->
 	    (match token with
 	    | Token.Integer v -> Model.append_opcode **> Code.PushInt v
 	    | Token.Float v -> Model.append_opcode **> Code.PushFloat v
 	    | Token.String v -> Model.append_opcode **> Code.PushString v
-	    | Token.Word "$" -> Model.append_opcode **> Code.App (* Uggly *)
+	    (* | Token.Word "$" -> Model.append_opcode **> Code.App (\* Uggly *\) *)
 	    | Token.Word name ->
 		let w = Model.lookup_symbol name in
 		(match w.Word.kind with

@@ -131,16 +131,16 @@ let rec unify (a, b) =
    (* Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b);  *)
   match a,b with
     | Term ("kind", ((a::lr) as l)), ((Term (n2, [])) as b)  ->
-      unify (a, b) @ ["left", Term("kind", lr);"right", Term("kind", [Term(n2,[])])]
+      unify (a, b) @ ["left", Term("kind", lr);]
 
     |  ((Term (n2, [])) as a), Term("kind", ((b::lr) as l))  ->
-      unify (a, b) @ ["right", Term("kind", lr); "left", Term("kind", [Term(n2,[])])]
+      unify (a, b) @ ["right", Term("kind", lr); ]
 
-    | Term ("in", a), ((Term ("in", [])) as b)  ->
-      ["left", Term("kind", a);]
+    (* | Term ("in", a), ((Term ("in", [])) as b)  -> *)
+    (*   ["left", Term("kind", a);] *)
 
-    | ((Term ("in", [])) as b),Term ("in", a)  ->
-      ["right", Term("kind", a);]
+    (* | ((Term ("in", [])) as b),Term ("in", a)  -> *)
+    (*   ["left", Term("kind", a);] *)
 
     | Term(n1, Var(a)::l1), Term(n2, l2) when
 	is_uppercase (a.[0])
