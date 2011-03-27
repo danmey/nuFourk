@@ -164,14 +164,20 @@ struct
 
 end
 
+module Custom =
+struct
+  let after_rules () =
+    ocaml_lib "ocamlx86/x86";
+end
+
 let _ = dispatch begin function
    | Before_options ->
        OCamlFind.before_options ();
        Batteries.before_options ()
    | After_rules ->
        OCamlFind.after_rules ();
-       Batteries.after_rules ()
-
+       Batteries.after_rules ();
+       Custom.after_rules ();
 
    | _ -> ()
 end
