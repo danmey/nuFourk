@@ -118,11 +118,11 @@ let rec to_string =
 
 let rec unify (a, b) = 
   (* let a,b = pre_unify (a,b) in *)
-  print_endline "--------------------";
-   Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b);
+  (* print_endline "--------------------"; *)
+  (*  Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b); *)
    let a,b = remove_kind a, remove_kind b in
   
-   Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b);
+   (* Printf.printf "unify: %s ---> %s\n\n" (to_string a) (to_string b); *)
    (* let a, b = match a, b with  *)
    (*   | Term ("kind", lst), a -> Term ("kind", lst), Term ("kind", [a]) *)
    (*   | a, Term ("kind", lst) -> Term ("kind", [a]), Term ("kind", lst) *)
@@ -136,11 +136,11 @@ let rec unify (a, b) =
     |  ((Term (n2, [])) as a), Term("kind", ((b::lr) as l))  ->
       unify (a, b) @ ["right", Term("kind", lr); ]
 
-    (* | Term ("in", a), ((Term ("in", [])) as b)  -> *)
-    (*   ["left", Term("kind", a);] *)
+    | Term ("in", a), ((Term ("in", [])) as b)  ->
+      ["left", Term("kind", a);]
 
-    (* | ((Term ("in", [])) as b),Term ("in", a)  -> *)
-    (*   ["left", Term("kind", a);] *)
+    | ((Term ("in", [])) as b),Term ("in", a)  ->
+      ["left", Term("kind", a);]
 
     | Term(n1, Var(a)::l1), Term(n2, l2) when
 	is_uppercase (a.[0])

@@ -1,0 +1,3 @@
+[submodule "ocaml-inline-x86"]
+	path = ocaml-inline-x86
+	url = ./ocaml-inline-x86/

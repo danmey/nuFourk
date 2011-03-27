@@ -12,9 +12,9 @@
 
 [ "Number: " show . \n ] : number
 
-; [ 0 [ dup number ] [ 1 + dup 10 < ] loop ] $
+[ 0 [ dup number ] [ 1 + dup 10 < ] loop ] $
 
-; [ "" [ append ] [ key dup 32 <> ] loop drop ] : token
+; [ "" 32 [ append key swap ] [ dup 32 <> ] loop drop ] : token
 
 ; [ swap dup rot dup rot swap ] : 2dup
 ; [ rot drop ] : nip2

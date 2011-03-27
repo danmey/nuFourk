@@ -71,7 +71,7 @@ let rec normal_type =
     | U.Term("int", []) -> IntType 
     | U.Term("float", []) -> FloatType 
     | U.Term("string", []) -> StringType 
-    | U.Var name -> print_endline name;if is_uppercase name.[0] then BigVarType name else VarType name
+    | U.Var name -> if is_uppercase name.[0] then BigVarType name else VarType name
     | U.Term ("kind", lst) -> KindType (List.map normal_type lst)
     | U.Term ("arrow", [U.Term ("in", lhs); U.Term ("out", rhs)]) -> 
       ArrowType (List.map normal_type lhs,
@@ -288,7 +288,7 @@ and signature_of_code dict code =
       let achar nm =
 	let idx = (List.assoc nm ass) in
 	let char_base = 
-          print_endline nm;
+          (* print_endline nm; *)
           flush stdout;
 	  if BatChar.is_uppercase nm.[0] then 'A' else 'a' in
 	let final_char = int_of_char char_base + idx in

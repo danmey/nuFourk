@@ -229,7 +229,7 @@ let init model =
       	    else
       	      Run.execute_code b2);
 
-      def "loop" ([[v 'A'] ---> [BoolType;v 'A'];[v 'A'] ---> [v 'A'];  ] --> [v 'A']) 
+      def "loop" ([[v 'A'] ---> [BoolType;v 'A'];[v 'A'] ---> [v 'A']; v 'A' ] --> [v 'A']) 
        	(fun () ->
        	  let cond_code = pop_code () in
        	  let body = pop_code() in
